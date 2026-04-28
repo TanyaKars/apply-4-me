@@ -9,8 +9,8 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "appy4me-api",
-    "appy4me-pw",
+    "apply4me-api",
+    "apply4me-pw",
 ]
 
 [[package]]
@@ -73,7 +73,7 @@ wheels = [
 ]
 
 [[package]]
-name = "appy4me-api"
+name = "apply4me-api"
 version = "0.1.0"
 source = { editable = "api" }
 dependencies = [
@@ -110,7 +110,7 @@ requires-dist = [
 ]
 
 [[package]]
-name = "appy4me-pw"
+name = "apply4me-pw"
 version = "0.1.0"
 source = { editable = "pw" }
 dependencies = [

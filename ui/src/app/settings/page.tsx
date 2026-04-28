@@ -123,7 +123,7 @@ export default function SettingsPage() {
               <Input
                 value={config.skill_md_path}
                 onChange={e => setConfig(c => ({ ...c, skill_md_path: e.target.value }))}
-                placeholder="~/.apply4me/SKILL.md  (default)"
+                placeholder="apply4me/.claude/skills/resume/SKILL.md  (default)"
                 className="font-mono text-sm"
               />
               <p className="text-xs text-muted-foreground">

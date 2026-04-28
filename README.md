@@ -155,7 +155,7 @@ To stop it, go back to Terminal and press `Ctrl + C`.
 
 ### 1. Fill in your resume
 
-Open the file `.claude/skills/resume/SKILL.md` in any text editor — it's in the apply4me folder you downloaded. Replace the example content with your real information: name, contact details, work history, skills.
+Open the file `apply4me/.claude/skills/resume/SKILL.md` in any text editor — it's in the apply4me folder you downloaded. Replace the example content with your real information: name, contact details, work history, skills.
 
 The more detail you put here, the better Claude can tailor your resume for each job. You can write naturally — no special format required.
 
