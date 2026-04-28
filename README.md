@@ -8,6 +8,26 @@ apply4me finds jobs on LinkedIn, rewrites your resume to match each job descript
 
 ---
 
+## Quick start with Docker (recommended)
+
+If you have [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed, you don't need Node.js or Python.
+
+```
+git clone https://github.com/TanyaKars/apply4me
+cd apply4me
+./start.sh
+```
+
+`start.sh` creates a `.env` file on first run — open it, add your Anthropic API key, then run `./start.sh` again.
+
+Once running:
+- App → **http://localhost:3000**
+- Browser view (for LinkedIn login & application review) → **http://localhost:6080/vnc.html**
+
+To stop: `Ctrl + C`, then `docker compose down`.
+
+---
+
 ## What it does
 
 1. **Finds jobs** — searches LinkedIn using your own account and pulls job listings matching your keywords
@@ -17,7 +37,7 @@ apply4me finds jobs on LinkedIn, rewrites your resume to match each job descript
 
 ---
 
-## Before you start
+## Before you start (manual install)
 
 You'll need to install a few free tools. This takes about 15–20 minutes and you only do it once.
 

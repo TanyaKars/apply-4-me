@@ -1,26 +1,32 @@
-version: "3.9"
-
 services:
   api:
     build:
-      context: ./api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: api/Dockerfile
     ports:
       - "8000:8000"
+      - "6080:6080"   # noVNC — view the browser at http://localhost:6080/vnc.html
     volumes:
       - ~/.apply4me:/root/.apply4me
+    env_file: .env
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - APP_ROOT=/app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   ui:
     build:
       context: ./ui
       dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8000
     ports:
       - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://api:8000
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
