@@ -12,7 +12,7 @@ from pathlib import Path
 
 from playwright.async_api import async_playwright
 
-COOKIE_FILE = Path.home() / ".appy4me" / "linkedin_cookies.json"
+COOKIE_FILE = Path.home() / ".apply4me" / "linkedin_cookies.json"
 
 
 async def setup_session():

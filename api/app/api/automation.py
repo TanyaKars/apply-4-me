@@ -24,7 +24,7 @@ async def setup_session():
     try:
         proc = subprocess.Popen(
             [sys.executable, "-m", "pw.auth.session", "--setup"],
-            cwd="/Users/tatianakarsova/Documents/Code/appy4me"
+            cwd="/Users/tatianakarsova/Documents/Code/apply4me"
         )
         return {"status": "launched", "pid": proc.pid, "message": "Browser opened. Log in to LinkedIn, then close the browser."}
     except Exception as e:
@@ -34,7 +34,7 @@ async def setup_session():
 @router.get("/session-status")
 async def session_status():
     from pathlib import Path
-    cookie_file = Path.home() / ".appy4me" / "linkedin_cookies.json"
+    cookie_file = Path.home() / ".apply4me" / "linkedin_cookies.json"
     return {"has_session": cookie_file.exists()}
 
 
@@ -50,7 +50,7 @@ async def trigger_scrape(req: ScrapeRequest):
         })
         proc = subprocess.Popen(
             [sys.executable, "-m", "pw.scrapers.linkedin", "--config", config],
-            cwd="/Users/tatianakarsova/Documents/Code/appy4me"
+            cwd="/Users/tatianakarsova/Documents/Code/apply4me"
         )
         return {"status": "started", "pid": proc.pid}
     except Exception as e:
@@ -59,7 +59,7 @@ async def trigger_scrape(req: ScrapeRequest):
 
 @router.post("/save-config")
 async def save_config(payload: dict):
-    config_file = Path.home() / ".appy4me" / "config.json"
+    config_file = Path.home() / ".apply4me" / "config.json"
     config_file.parent.mkdir(exist_ok=True)
     existing = json.loads(config_file.read_text()) if config_file.exists() else {}
     existing.update(payload)
@@ -73,7 +73,7 @@ async def trigger_apply(job_id: int):
     try:
         proc = subprocess.Popen(
             [sys.executable, "-m", "pw.ats.run", "--job-id", str(job_id)],
-            cwd="/Users/tatianakarsova/Documents/Code/appy4me"
+            cwd="/Users/tatianakarsova/Documents/Code/apply4me"
         )
         return {"status": "started", "pid": proc.pid}
     except Exception as e:

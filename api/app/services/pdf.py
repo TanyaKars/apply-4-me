@@ -5,7 +5,7 @@ import jinja2
 from weasyprint import HTML, CSS
 
 TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
-OUTPUT_DIR = Path.home() / ".appy4me" / "resumes"
+OUTPUT_DIR = Path.home() / ".apply4me" / "resumes"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 

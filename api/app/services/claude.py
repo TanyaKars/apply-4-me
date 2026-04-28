@@ -8,7 +8,7 @@ def get_api_key() -> str:
     key = os.getenv("ANTHROPIC_API_KEY")
     if key:
         return key
-    config_file = Path.home() / ".appy4me" / "config.json"
+    config_file = Path.home() / ".apply4me" / "config.json"
     if config_file.exists():
         config = json.loads(config_file.read_text())
         return config.get("anthropic_api_key", "")
@@ -16,13 +16,14 @@ def get_api_key() -> str:
 
 
 def get_skill_md_path() -> Path:
-    config_file = Path.home() / ".appy4me" / "config.json"
+    config_file = Path.home() / ".apply4me" / "config.json"
     if config_file.exists():
         config = json.loads(config_file.read_text())
         custom = config.get("skill_md_path", "")
         if custom:
             return Path(custom).expanduser()
-    return Path.home() / ".appy4me" / "SKILL.md"
+    # Default: .claude/skills/resume/SKILL.md in the project root
+    return Path(__file__).parents[3] / ".claude" / "skills" / "resume" / "SKILL.md"
 
 
 def read_skill_md() -> str:

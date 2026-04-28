@@ -8,7 +8,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ~/.appy4me:/root/.appy4me
+      - ~/.apply4me:/root/.apply4me
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     restart: unless-stopped

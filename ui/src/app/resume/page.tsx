@@ -81,7 +81,7 @@ export default function ResumePage() {
         <div>
           <h1 className="text-2xl font-bold">Resume</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Edit your SKILL.md in VS Code — Claude reads it when tailoring
+            Edit .claude/skills/resume/SKILL.md in VS Code — Claude reads it when tailoring
           </p>
         </div>
         <div className="flex items-center gap-2">

@@ -17,7 +17,7 @@ export function Nav() {
     <nav className="border-b bg-white">
       <div className="container mx-auto px-4 max-w-6xl flex items-center justify-between h-14">
         <Link href="/" className="font-bold text-lg text-primary">
-          appy4me
+          apply4me
         </Link>
         <div className="flex items-center gap-1">
           {links.map(({ href, label, icon: Icon }) => (

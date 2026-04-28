@@ -56,7 +56,7 @@ export default function SettingsPage() {
       .catch(() => setSessionStatus(false))
 
     // Load config from file (via backend config endpoint if available, or localStorage)
-    const saved = localStorage.getItem("appy4me_config")
+    const saved = localStorage.getItem("apply4me_config")
     if (saved) {
       const c = JSON.parse(saved)
       setConfig(c)
@@ -76,9 +76,9 @@ export default function SettingsPage() {
       },
     }
     setConfig(updated)
-    localStorage.setItem("appy4me_config", JSON.stringify(updated))
+    localStorage.setItem("apply4me_config", JSON.stringify(updated))
 
-    // Persist to ~/.appy4me/config.json via backend
+    // Persist to ~/.apply4me/config.json via backend
     await fetch("http://localhost:8000/api/automation/save-config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -123,7 +123,7 @@ export default function SettingsPage() {
               <Input
                 value={config.skill_md_path}
                 onChange={e => setConfig(c => ({ ...c, skill_md_path: e.target.value }))}
-                placeholder="~/.appy4me/SKILL.md  (default)"
+                placeholder="~/.apply4me/SKILL.md  (default)"
                 className="font-mono text-sm"
               />
               <p className="text-xs text-muted-foreground">
@@ -177,7 +177,7 @@ export default function SettingsPage() {
             </div>
             <p className="text-xs text-muted-foreground">
               This opens a browser window where you log in to LinkedIn manually.
-              Cookies are saved to ~/.appy4me/linkedin_cookies.json and reused for all scraping.
+              Cookies are saved to ~/.apply4me/linkedin_cookies.json and reused for all scraping.
             </p>
           </CardContent>
         </Card>

@@ -32,3 +32,6 @@ npm-debug.log*
 
 # Generated
 *.pdf
+
+# Other
+SKILL.md

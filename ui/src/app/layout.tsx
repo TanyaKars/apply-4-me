@@ -7,7 +7,7 @@ import { Nav } from "@/components/nav"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "appy4me — Job Application Automation",
+  title: "apply4me — Job Application Automation",
   description: "Automate your job applications with AI-tailored resumes",
 }
 

@@ -219,7 +219,7 @@ export default function JobDetailPage() {
               <CardHeader>
                 <CardTitle className="text-base">Tailored Resume</CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  Generated from your SKILL.md for this specific role · PDF saved to ~/.appy4me/resumes/
+                  Generated from your SKILL.md for this specific role · PDF saved to ~/.apply4me/resumes/
                 </p>
               </CardHeader>
               <CardContent>

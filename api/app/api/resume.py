@@ -111,7 +111,7 @@ async def generate_pdf(session: Session = Depends(get_session)):
 
 @router.post("/upload-photo")
 async def upload_photo(file: UploadFile = File(...)):
-    photos_dir = Path.home() / ".appy4me" / "photos"
+    photos_dir = Path.home() / ".apply4me" / "photos"
     photos_dir.mkdir(exist_ok=True)
     photo_path = photos_dir / file.filename
     content = await file.read()

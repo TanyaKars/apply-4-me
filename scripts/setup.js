@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * appy4me setup script
+ * apply4me setup script
  * Run: node scripts/setup.js
  */
 const { execSync } = require("child_process")
@@ -8,12 +8,14 @@ const fs = require("fs")
 const path = require("path")
 const os = require("os")
 
-const DATA_DIR = path.join(os.homedir(), ".appy4me")
+const DATA_DIR = path.join(os.homedir(), ".apply4me")
 const CONFIG_FILE = path.join(DATA_DIR, "config.json")
+const REPO_ROOT = path.resolve(__dirname, "..")
+const SKILL_MD = path.join(REPO_ROOT, ".claude", "skills", "resume", "SKILL.md")
 
-console.log("\n🚀 appy4me setup\n")
+console.log("\n🚀 apply4me setup\n")
 
-// Create ~/.appy4me
+// Create ~/.apply4me
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true })
   console.log(`✓ Created ${DATA_DIR}`)
@@ -22,6 +24,7 @@ if (!fs.existsSync(DATA_DIR)) {
 // Create default config if missing
 if (!fs.existsSync(CONFIG_FILE)) {
   const defaultConfig = {
+    skill_md_path: SKILL_MD,
     search: {
       keywords: ["Software Engineer"],
       location: "Remote",
@@ -60,12 +63,12 @@ console.log(`
 ✅ Setup complete!
 
 Next steps:
-1. Add your Anthropic API key to .env  (copy .env.example)
-2. Run: npm run dev        (starts api + ui)
-3. Visit: http://localhost:3000
-4. Go to Settings → Set Up Session (LinkedIn auth)
-5. Go to Resume → Build your base resume
+1. Copy .env.example → .env and add your Anthropic API key
+2. Edit SKILL.md in VS Code — fill in your real experience and preferences
+3. Run: npm run dev        (starts api + ui)
+4. Visit: http://localhost:3000
+5. Go to Settings → Set Up Session (LinkedIn auth)
 6. Click "Scrape Jobs" on the dashboard
 
-Docs: https://github.com/yourname/appy4me
+Docs: https://github.com/yourname/apply4me
 `)
