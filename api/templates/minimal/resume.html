@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'Inter', 'Helvetica Neue', sans-serif;
+    font-size: 9.5pt;
+    color: #111;
+    background: white;
+    line-height: 1.5;
+  }
+  .page { width: 210mm; min-height: 297mm; padding: 18mm 18mm 14mm 18mm; }
+  .header { margin-bottom: 16px; }
+  .name { font-size: 24pt; font-weight: 300; letter-spacing: -1px; }
+  .contact {
+    display: flex; gap: 12px; flex-wrap: wrap;
+    margin-top: 5px; font-size: 8.5pt; color: #666;
+  }
+  .divider { height: 1px; background: #e5e7eb; margin: 12px 0; }
+  .section { margin-bottom: 14px; }
+  .section-title {
+    font-size: 8pt;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #9ca3af;
+    margin-bottom: 7px;
+  }
+  .summary { font-size: 9.5pt; color: #374151; }
+  .exp-item { margin-bottom: 10px; }
+  .exp-header { display: flex; justify-content: space-between; align-items: baseline; }
+  .exp-title-line { font-size: 10pt; font-weight: 600; }
+  .exp-company { color: #6b7280; font-size: 9pt; font-weight: 400; }
+  .exp-dates { font-size: 8.5pt; color: #9ca3af; }
+  .exp-bullets { margin-top: 3px; padding-left: 12px; }
+  .exp-bullets li { font-size: 9pt; color: #374151; margin-bottom: 2px; list-style-type: "– "; }
+  .edu-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .edu-degree { font-weight: 600; font-size: 9.5pt; }
+  .edu-school { color: #6b7280; font-size: 9pt; }
+  .skills { font-size: 9pt; color: #374151; }
+  .cert-row { font-size: 9pt; margin-bottom: 3px; }
+
+  {% if include_photo %}
+  .header { display: flex; align-items: flex-start; gap: 16px; }
+  .photo { width: 64px; height: 64px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
+  {% endif %}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    {% if include_photo and photo_data_uri %}
+    <img class="photo" src="{{ photo_data_uri }}" alt="">
+    {% endif %}
+    <div>
+      <div class="name">{{ resume.personal.name }}</div>
+      <div class="contact">
+        {% if resume.personal.email %}<span>{{ resume.personal.email }}</span>{% endif %}
+        {% if resume.personal.phone %}<span>{{ resume.personal.phone }}</span>{% endif %}
+        {% if resume.personal.location %}<span>{{ resume.personal.location }}</span>{% endif %}
+        {% if resume.personal.linkedin %}<span>{{ resume.personal.linkedin }}</span>{% endif %}
+        {% if resume.personal.github %}<span>{{ resume.personal.github }}</span>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  {% if resume.summary %}
+  <div class="section">
+    <div class="section-title">About</div>
+    <div class="summary">{{ resume.summary }}</div>
+  </div>
+  {% endif %}
+
+  {% if resume.experience %}
+  <div class="section">
+    <div class="section-title">Experience</div>
+    {% for exp in resume.experience %}
+    <div class="exp-item">
+      <div class="exp-header">
+        <div><span class="exp-title-line">{{ exp.title }}</span>{% if exp.company %} <span class="exp-company">@ {{ exp.company }}</span>{% endif %}</div>
+        <div class="exp-dates">{{ exp.dates }}</div>
+      </div>
+      {% if exp.bullets %}
+      <ul class="exp-bullets">
+        {% for bullet in exp.bullets %}<li>{{ bullet }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if resume.education %}
+  <div class="section">
+    <div class="section-title">Education</div>
+    {% for edu in resume.education %}
+    <div class="edu-row">
+      <div><div class="edu-degree">{{ edu.degree }}</div><div class="edu-school">{{ edu.school }}</div></div>
+      <div class="exp-dates">{{ edu.year }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if resume.skills %}
+  <div class="section">
+    <div class="section-title">Skills</div>
+    <div class="skills">{{ resume.skills | join(' · ') }}</div>
+  </div>
+  {% endif %}
+
+  {% if resume.certifications %}
+  <div class="section">
+    <div class="section-title">Certifications</div>
+    {% for cert in resume.certifications %}
+    <div class="cert-row">{{ cert.name }}{% if cert.issuer %} · {{ cert.issuer }}{% endif %}{% if cert.year %} · {{ cert.year }}{% endif %}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</div>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "appy4me",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:ui\"",
+    "dev:ui": "cd ui && npm run dev",
+    "dev:api": "cd api && uv run fastapi dev app/main.py --port 8000",
+    "build": "cd ui && npm run build",
+    "setup": "node scripts/setup.js"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
