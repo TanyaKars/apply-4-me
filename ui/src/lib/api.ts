@@ -109,7 +109,15 @@ export const api = {
   automation: {
     sessionStatus: () => request<{ has_session: boolean }>("/api/automation/session-status"),
     setupSession: () => request<{ status: string; message: string }>("/api/automation/setup-session", { method: "POST" }),
-    scrape: (config: { keywords: string[]; location: string; date_posted: string }) =>
+    scrape: (config: {
+      keywords: string[]
+      location?: string
+      country?: string
+      city?: string
+      date_posted?: string
+      work_types?: string[]
+      max_applicants?: number | null
+    }) =>
       request<{ status: string }>("/api/automation/scrape", {
         method: "POST",
         body: JSON.stringify(config),

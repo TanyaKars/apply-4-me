@@ -6,6 +6,7 @@ Usage:
 """
 import asyncio
 import json
+import re
 import sys
 from urllib.parse import quote
 
@@ -17,7 +18,21 @@ from pw.auth.session import load_cookies
 BACKEND_URL = "http://localhost:8000"
 
 
-def build_linkedin_search_url(keywords: list[str], location: str, date_posted: str) -> str:
+WORK_TYPE_MAP = {"remote": "2", "hybrid": "3", "onsite": "1"}
+
+APPLICANT_LIMITS = {
+    "lt10": 10,
+    "lt50": 50,
+    "lt100": 100,
+}
+
+
+def build_linkedin_search_url(
+    keywords: list[str],
+    location: str,
+    date_posted: str,
+    work_types: list[str] | None = None,
+) -> str:
     kw = quote(" ".join(keywords))
     loc = quote(location)
 
@@ -28,11 +43,18 @@ def build_linkedin_search_url(keywords: list[str], location: str, date_posted: s
     }
     time_filter = time_filter_map.get(date_posted, "r604800")
 
-    # No f_LF filter — include all jobs, not just Easy Apply
-    return (
+    url = (
         f"https://www.linkedin.com/jobs/search/"
         f"?keywords={kw}&location={loc}&f_TPR={time_filter}"
     )
+
+    if work_types:
+        codes = [WORK_TYPE_MAP[wt] for wt in work_types if wt in WORK_TYPE_MAP]
+        if codes:
+            # f_WT takes comma-separated codes — do NOT encode the comma
+            url += f"&f_WT={','.join(codes)}"
+
+    return url
 
 
 async def scroll_to_load_all(page: Page, max_scrolls: int = 10):
@@ -98,7 +120,7 @@ async def extract_job_cards(page: Page) -> list[dict]:
 
 
 async def extract_job_detail(page: Page, job_url: str) -> dict:
-    """Open job page and extract JD text + external apply URL."""
+    """Open job page and extract JD text + external apply URL + applicant count."""
     try:
         await page.goto(job_url, wait_until="domcontentloaded", timeout=30_000)
         await page.wait_for_timeout(2000)
@@ -131,10 +153,42 @@ async def extract_job_detail(page: Page, job_url: str) -> dict:
                     ats_type = name
                     break
 
-        return {"jd_text": jd_text.strip(), "ats_url": ats_url, "ats_type": ats_type}
+        # Applicant count — text like "42 applicants" / "Over 200 applicants" / "Be among the first 25"
+        # LinkedIn changes class names frequently, so walk all text nodes for "applicant"
+        applicant_count: int | None = None
+        try:
+            count_text = await page.evaluate("""() => {
+                // Walk every visible text node looking for "applicant"
+                const walker = document.createTreeWalker(
+                    document.body,
+                    NodeFilter.SHOW_TEXT,
+                    null
+                );
+                let node;
+                while ((node = walker.nextNode())) {
+                    const t = node.textContent.trim();
+                    if (t.toLowerCase().includes('applicant')) {
+                        return t;
+                    }
+                }
+                return '';
+            }""")
+            if count_text:
+                nums = re.findall(r"\d[\d,]*", count_text)
+                if nums:
+                    applicant_count = int(nums[-1].replace(",", ""))
+        except Exception:
+            pass
+
+        return {
+            "jd_text": jd_text.strip(),
+            "ats_url": ats_url,
+            "ats_type": ats_type,
+            "applicant_count": applicant_count,
+        }
     except Exception as e:
         print(f"  Error extracting detail from {job_url}: {e}")
-        return {"jd_text": "", "ats_url": "", "ats_type": "unknown"}
+        return {"jd_text": "", "ats_url": "", "ats_type": "unknown", "applicant_count": None}
 
 
 async def post_jobs_to_backend(jobs: list[dict]):
@@ -152,14 +206,31 @@ async def post_jobs_to_backend(jobs: list[dict]):
 
 async def scrape(config: dict):
     keywords = config.get("keywords", ["Software Engineer"])
-    location = config.get("location", "Remote")
     date_posted = config.get("date_posted", "past_week")
     blacklist = set(config.get("blacklist_companies", []))
+    work_types = config.get("work_types", [])
+    max_applicants: int | None = config.get("max_applicants")  # None means no limit
+
+    # Build location from city + country (or legacy flat "location" field)
+    country = config.get("country", "")
+    city = config.get("city", "")
+    if city and country:
+        location = f"{city}, {country}"
+    elif country:
+        location = country
+    else:
+        location = config.get("location", "Remote")
+
+    if date_posted not in ("past_day", "past_week", "past_month"):
+        print(f"  Warning: unknown date_posted value '{date_posted}', defaulting to past_week")
 
     print(f"Scraping LinkedIn for: {keywords} in {location}")
+    print(f"  Date posted: {date_posted}")
+    print(f"  Work types: {work_types or 'any'}")
+    print(f"  Max applicants: {max_applicants if max_applicants is not None else 'any'}")
 
     cookies = load_cookies()
-    search_url = build_linkedin_search_url(keywords, location, date_posted)
+    search_url = build_linkedin_search_url(keywords, location, date_posted, work_types or None)
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -179,12 +250,49 @@ async def scrape(config: dict):
         cards = await extract_job_cards(page)
         print(f"Found {len(cards)} job cards")
 
-        cards = [c for c in cards if c["company"] not in blacklist]
+        blacklist_lower = {b.lower() for b in blacklist}
+        cards = [c for c in cards if c["company"].lower() not in blacklist_lower]
+
+        # Filter cards by location text when a specific country is requested.
+        # LinkedIn's remote filter still surfaces international jobs, so we
+        # post-filter: keep cards whose location is empty/generic OR contains
+        # the target country name.
+        if country:
+            country_variants = [country.lower()]
+            if country.lower() in ("united states", "usa", "us"):
+                country_variants += ["united states", "usa", "u.s."]
+            elif country.lower() in ("united kingdom", "uk"):
+                country_variants += ["united kingdom", "uk", "great britain"]
+
+            # Known countries to exclude (anything that looks like another country)
+            # We use an allowlist: keep only if location is blank/remote OR contains target
+            def _location_ok(loc: str) -> bool:
+                loc = loc.lower().strip()
+                if not loc or loc in ("remote", "worldwide", "anywhere"):
+                    return True
+                return any(v in loc for v in country_variants)
+
+            before = len(cards)
+            cards = [c for c in cards if _location_ok(c.get("location", ""))]
+            print(f"Location filter ({country}): {before} → {len(cards)} cards")
 
         enriched = []
         for i, card in enumerate(cards[:50]):
             print(f"  [{i+1}/{len(cards)}] {card['title']} @ {card['company']}")
             detail = await extract_job_detail(page, card["url"])
+
+            # Filter by applicant count if set
+            count = detail.get("applicant_count")
+            print(f"    Applicants: {count if count is not None else 'unknown'}")
+            if max_applicants is not None:
+                if count is None:
+                    # Could not extract count — skip to be safe when filter is strict
+                    print(f"    Skipping — applicant count unknown, filter is {max_applicants}")
+                    continue
+                if count > max_applicants:
+                    print(f"    Skipping — {count} applicants > limit {max_applicants}")
+                    continue
+
             enriched.append({**card, **detail})
             await asyncio.sleep(1.5)
 

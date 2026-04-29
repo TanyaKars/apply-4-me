@@ -3,8 +3,11 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlmodel import Session
+from app.db import get_session
+from app.models import Job
 
 # In Docker this is /app; locally falls back to the repo root
 APP_ROOT = os.environ.get("APP_ROOT", str(Path(__file__).parents[3]))
@@ -15,7 +18,11 @@ router = APIRouter()
 class ScrapeRequest(BaseModel):
     keywords: list[str] = []
     location: str = "Remote"
+    country: str = ""
+    city: str = ""
     date_posted: str = "past_week"
+    work_types: list[str] = []
+    max_applicants: int | None = None
 
 
 class ApplyRequest(BaseModel):
@@ -50,7 +57,11 @@ async def trigger_scrape(req: ScrapeRequest):
         config = json.dumps({
             "keywords": req.keywords,
             "location": req.location,
-            "date_posted": req.date_posted
+            "country": req.country,
+            "city": req.city,
+            "date_posted": req.date_posted,
+            "work_types": req.work_types,
+            "max_applicants": req.max_applicants,
         })
         proc = subprocess.Popen(
             [sys.executable, "-m", "pw.scrapers.linkedin", "--config", config],
@@ -71,9 +82,33 @@ async def save_config(payload: dict):
     return {"ok": True}
 
 
+SUPPORTED_ATS = {"greenhouse", "lever", "ashby", "workday"}
+
+
 @router.post("/apply/{job_id}")
-async def trigger_apply(job_id: int):
+async def trigger_apply(job_id: int, session: Session = Depends(get_session)):
     """Trigger ATS application for a job."""
+    job = session.get(Job, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Return early if no automation adapter exists for this ATS type
+    if job.ats_type not in SUPPORTED_ATS:
+        apply_url = job.ats_url or job.url or ""
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "reason": "unsupported_ats",
+                "ats_type": job.ats_type,
+                "apply_url": apply_url,
+                "message": (
+                    f"No automation adapter for '{job.ats_type}' — only "
+                    f"{', '.join(sorted(SUPPORTED_ATS))} are supported. "
+                    "Open the job link to apply manually."
+                ),
+            }
+        )
+
     try:
         proc = subprocess.Popen(
             [sys.executable, "-m", "pw.ats.run", "--job-id", str(job_id)],

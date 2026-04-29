@@ -7,7 +7,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 import { JobCard } from "@/components/job-card"
 import { api, type Job, type JobStatus } from "@/lib/api"
 
@@ -54,8 +54,26 @@ export default function HomePage() {
     }
     setScraping(true)
     try {
-      await api.automation.scrape({ keywords: ["QA Engineer", "SDET"], location: "Remote", date_posted: "past_week" })
-      toast.success("Scrape started — new jobs will appear shortly")
+      const saved = localStorage.getItem("apply4me_config")
+      const cfg = saved ? JSON.parse(saved) : {}
+      const search = cfg.search ?? {}
+      const keywords = search.keywords?.length ? search.keywords : ["QA Engineer", "SDET"]
+      const country = search.country ?? ""
+      const city = search.city ?? ""
+      const workTypes: string[] = search.work_types ?? []
+      const location = city && country ? `${city}, ${country}` : country || "Remote"
+
+      await api.automation.scrape({
+        keywords,
+        country,
+        city,
+        date_posted: search.date_posted ?? "past_week",
+        work_types: workTypes,
+        max_applicants: search.max_applicants ?? null,
+      })
+
+      const wtLabel = workTypes.length ? workTypes.join(", ") : "any type"
+      toast.success(`Scraping: ${keywords.join(", ")} · ${location} · ${wtLabel}`)
       setTimeout(() => { loadJobs(); setScraping(false) }, 5000)
     } catch {
       toast.error("Failed to start scrape")
@@ -126,16 +144,23 @@ export default function HomePage() {
             onChange={e => setSearch(e.target.value)}
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_FILTERS.map(f => (
-              <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex gap-1">
+          {STATUS_FILTERS.map(f => (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => setStatusFilter(f.value)}
+              className={cn(
+                "px-3 py-1.5 text-sm border rounded-md transition-colors",
+                statusFilter === f.value
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background text-foreground border-input hover:bg-accent"
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Job list */}
