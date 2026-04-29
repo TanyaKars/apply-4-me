@@ -26,6 +26,13 @@ def get_skill_md_path() -> Path:
     return Path(__file__).parents[3] / ".claude" / "skills" / "resume" / "SKILL.md"
 
 
+def read_ats_rules() -> str:
+    path = Path(__file__).parents[3] / ".claude" / "skills" / "resume" / "ATS-RULES.md"
+    if path.exists():
+        return path.read_text()
+    return ""
+
+
 def read_skill_md() -> str:
     path = get_skill_md_path()
     if not path.exists():
@@ -68,6 +75,12 @@ RESUME_JSON_SCHEMA = """{
 async def tailor_resume(skill_md: str, jd_text: str) -> dict:
     """Generate a tailored resume JSON from SKILL.md + job description."""
     client = anthropic.Anthropic(api_key=get_api_key())
+    ats_rules = read_ats_rules()
+
+    ats_section = f"""
+--- ATS OPTIMIZATION RULES (do not override) ---
+{ats_rules}
+""" if ats_rules else ""
 
     prompt = f"""You are an expert resume writer. Tailor the candidate's resume for the job description below.
 
@@ -76,7 +89,7 @@ async def tailor_resume(skill_md: str, jd_text: str) -> dict:
 
 --- JOB DESCRIPTION ---
 {jd_text}
-
+{ats_section}
 Rules:
 - Follow every preference stated in SKILL.md exactly — tone, bullet count, word choices, what to avoid, everything
 - Do NOT fabricate experience, skills, or companies not mentioned in SKILL.md

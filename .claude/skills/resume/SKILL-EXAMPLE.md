@@ -26,7 +26,7 @@ argument-hint: "[what to update]"
 
 ## Tailoring Preferences
 
-<!-- These are the general tailoring pref, you can modify it if needed -->
+<!-- ✅ SAFE TO EDIT — these are your personal writing style preferences -->
 
 - Write in first person, active voice, past tense for past roles
 - Maximum 4 bullet points per past roles — quality over quantity
@@ -37,6 +37,11 @@ argument-hint: "[what to update]"
 - Do not invent experience or skills I don't have
 - Prioritize the most relevant experience for the target role
 - Do not use red-flag words like 'knowledge', 'ability', 'familiarity', 'assist', 'support', 'helped', 'contributed to', 'experienced' — I want my resume to sound confident and impactful, not wishy-washy or junior
+
+<!-- 🚫 DO NOT TOUCH — ATS scanner rules live in ATS-RULES.md in this same folder.
+     They ensure your resume passes automated keyword filters used by Greenhouse, Lever,
+     Workday, and Ashby before a human ever sees it. Claude loads that file automatically.
+     You never need to reference or copy anything from it here. -->
 ---
 
 ## Summary
