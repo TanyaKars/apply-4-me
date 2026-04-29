@@ -185,4 +185,8 @@ def get_resume_pdf(job_id: int, session: Session = Depends(get_session)):
     path = Path(job.tailored_resume_path)
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"PDF file not found at {path}")
-    return FileResponse(path, media_type="application/pdf", filename=path.name)
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{path.name}"'},
+    )

@@ -50,6 +50,8 @@ async def generate_pdf(
                 photo_data_uri = f"data:{mime};base64,{b64}"
 
     experience_grouped = _group_experience(resume_data.get("experience", []))
+    # Flat mode: one entry per company (most recent role only)
+    experience_flat = [g["roles"][0] for g in experience_grouped]
 
     html_content = tmpl.render(
         resume=resume_data,
@@ -57,6 +59,7 @@ async def generate_pdf(
         photo_data_uri=photo_data_uri,
         group_experience=group_experience,
         experience_grouped=experience_grouped,
+        experience_flat=experience_flat,
     )
 
     filename = f"job_{job_id}.pdf" if job_id else "resume.pdf"

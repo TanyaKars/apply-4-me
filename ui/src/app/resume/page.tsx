@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
 
 export default function ResumePage() {
@@ -146,19 +146,23 @@ export default function ResumePage() {
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
                 <Label>Template</Label>
-                <Select
-                  value={settings.template}
-                  onValueChange={v => setSettings(s => ({ ...s, template: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {["modern", "classic", "minimal"].map(t => (
-                      <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-1.5">
+                  {["modern", "classic", "minimal"].map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setSettings(s => ({ ...s, template: t }))}
+                      className={cn(
+                        "flex-1 py-1.5 text-sm border rounded-md capitalize transition-colors",
+                        settings.template === t
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-background text-foreground border-input hover:bg-accent"
+                      )}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="flex items-center gap-2">

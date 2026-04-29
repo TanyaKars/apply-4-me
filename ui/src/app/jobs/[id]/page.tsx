@@ -7,6 +7,7 @@ import {
   ArrowLeft, Sparkles, Send, FileText, ExternalLink,
   ChevronDown, ChevronUp, Loader2, Eye
 } from "lucide-react"
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -167,6 +168,14 @@ export default function JobDetailPage() {
           {tailoring ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1.5" />}
           {tailored ? "Re-tailor Resume" : "Tailor Resume"}
         </Button>
+        <Button
+          variant="outline"
+          disabled={!tailored}
+          onClick={() => window.open(`${API_BASE}/api/jobs/${id}/resume-pdf`, "_blank")}
+        >
+          <Eye className="h-4 w-4 mr-1.5" />
+          Preview PDF
+        </Button>
         <Button variant="outline" onClick={handleCoverLetter} disabled={coverLetterLoading || !job.jd_text}>
           {coverLetterLoading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <FileText className="h-4 w-4 mr-1.5" />}
           {job.cover_letter ? "Regenerate Cover Letter" : "Generate Cover Letter"}
@@ -183,11 +192,10 @@ export default function JobDetailPage() {
         )}
       </div>
 
-      <Tabs defaultValue={tailored ? "pdf" : "jd"}>
+      <Tabs defaultValue="jd">
         <TabsList>
           <TabsTrigger value="jd">Job Description</TabsTrigger>
           {tailored && <TabsTrigger value="tailored">Resume (text)</TabsTrigger>}
-          {tailored && <TabsTrigger value="pdf"><Eye className="h-3.5 w-3.5 mr-1" />PDF Preview</TabsTrigger>}
           {job.cover_letter && <TabsTrigger value="cover">Cover Letter</TabsTrigger>}
         </TabsList>
 
@@ -230,22 +238,7 @@ export default function JobDetailPage() {
           </TabsContent>
         )}
 
-        {tailored && (
-          <TabsContent value="pdf" className="mt-4">
-            <Card>
-              <CardContent className="p-0 overflow-hidden rounded-lg">
-                <iframe
-                  src={`http://localhost:8000/api/jobs/${id}/resume-pdf`}
-                  className="w-full border-0"
-                  style={{ height: "80vh" }}
-                  title="Resume PDF Preview"
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
-
-        {job.cover_letter && (
+{job.cover_letter && (
           <TabsContent value="cover" className="mt-4">
             <Card>
               <CardHeader>

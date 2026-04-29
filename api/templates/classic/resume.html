@@ -164,7 +164,6 @@
     {% if group_experience %}
       {% for group in experience_grouped %}
       <div class="exp-group">
-        {% if group.roles | length > 1 %}
         <div class="exp-group-company">{{ group.company }}</div>
         {% for role in group.roles %}
         <div class="exp-role">
@@ -181,29 +180,10 @@
           {% endif %}
         </div>
         {% endfor %}
-        {% else %}
-        {% set exp = group.roles[0] %}
-        <div class="exp-item">
-          <div class="exp-header">
-            <div class="exp-left">
-              <span class="exp-title">{{ exp.title }}</span>
-              {% if exp.company %} — <span class="exp-company">{{ exp.company }}</span>{% endif %}
-            </div>
-            <div class="exp-dates">{{ exp.dates }}</div>
-          </div>
-          {% if exp.bullets %}
-          <ul class="exp-bullets">
-            {% for bullet in exp.bullets %}
-            <li>{{ bullet }}</li>
-            {% endfor %}
-          </ul>
-          {% endif %}
-        </div>
-        {% endif %}
       </div>
       {% endfor %}
     {% else %}
-      {% for exp in resume.experience %}
+      {% for exp in experience_flat %}
       <div class="exp-item">
         <div class="exp-header">
           <div class="exp-left">

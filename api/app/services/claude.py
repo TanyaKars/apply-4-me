@@ -86,6 +86,7 @@ Instructions:
 - Reorder skills so the most JD-relevant ones come first
 - Write the summary to directly address this specific role
 - Extract the exact job title from the JD and put it in personal.position
+- If the candidate held multiple roles at the same company, create a SEPARATE experience entry for each role — never combine them into one entry with "/" or "and". Each role gets its own title, dates, and bullets.
 
 Return ONLY valid JSON matching this schema, no explanation:
 {RESUME_JSON_SCHEMA}"""
