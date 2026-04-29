@@ -47,9 +47,22 @@ async def setup_session():
 
 @router.get("/session-status")
 async def session_status():
-    from pathlib import Path
+    import json
+    import time
     cookie_file = Path.home() / ".apply4me" / "linkedin_cookies.json"
-    return {"has_session": cookie_file.exists()}
+    if not cookie_file.exists():
+        return {"has_session": False, "expired": False}
+    try:
+        cookies = json.loads(cookie_file.read_text())
+        li_at = next((c for c in cookies if c.get("name") == "li_at"), None)
+        if not li_at:
+            return {"has_session": False, "expired": False}
+        expires = li_at.get("expires", -1)
+        if expires != -1 and expires < time.time():
+            return {"has_session": False, "expired": True}
+        return {"has_session": True, "expired": False}
+    except Exception:
+        return {"has_session": False, "expired": False}
 
 
 @router.post("/scrape")
@@ -101,7 +114,7 @@ async def save_config(payload: dict):
     return {"ok": True}
 
 
-SUPPORTED_ATS = {"greenhouse", "lever", "ashby", "workday", "easy_apply"}
+SUPPORTED_ATS = {"greenhouse", "lever", "ashby", "workday", "easy_apply", "unknown"}
 
 
 @router.post("/apply/{job_id}")

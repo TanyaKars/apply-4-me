@@ -40,16 +40,10 @@ async def apply_to_job(job_id: int):
         return
 
     AdapterClass = get_adapter(ats_type)
-    if not AdapterClass:
-        print(f"No adapter for ATS type: {ats_type}. Please apply manually.")
-        return
 
-    # Get resume data
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{BACKEND_URL}/api/resume/")
-        resume_payload = resp.json()
-
-    resume_data = resume_payload.get("data", {})
+    # Resume data is stored on the job itself after tailoring
+    raw = job.get("tailored_data")
+    resume_data = json.loads(raw) if raw else {}
     pdf_path = job.get("tailored_resume_path", "")
 
     if not pdf_path or not Path(pdf_path).exists():
@@ -67,19 +61,31 @@ async def apply_to_job(job_id: int):
 
         # For easy_apply, always navigate to the job page itself, not any cached ats_url
         apply_target = job.get("url") if ats_type == "easy_apply" else ats_url
-        adapter = AdapterClass(page, resume_data, pdf_path)
-        success = await adapter.fill_form(apply_target)
 
-        if success:
-            # Update job status
-            async with httpx.AsyncClient() as client:
-                await client.patch(
-                    f"{BACKEND_URL}/api/jobs/{job_id}",
-                    json={"status": "applied"}
-                )
-            print(f"Job {job_id} marked as applied!")
+        if AdapterClass:
+            adapter = AdapterClass(page, resume_data, pdf_path)
+        else:
+            # Fall back to AI-guided filler for any unrecognised ATS
+            from pw.ats.ai_filler import AIFillerAdapter
+            print(f"No specific adapter for '{ats_type}' — using AI-guided form filler.")
+            adapter = AIFillerAdapter(
+                page, resume_data, pdf_path,
+                jd_text=job.get("jd_text", "")
+            )
 
-        await browser.close()
+        try:
+            success = await adapter.fill_form(apply_target)
+
+            if success:
+                # Update job status
+                async with httpx.AsyncClient() as client:
+                    await client.patch(
+                        f"{BACKEND_URL}/api/jobs/{job_id}",
+                        json={"status": "applied"}
+                    )
+                print(f"Job {job_id} marked as applied!")
+        finally:
+            await browser.close()
 
 
 if __name__ == "__main__":

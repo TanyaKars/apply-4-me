@@ -49,9 +49,11 @@ export default function HomePage() {
       .catch(() => setHasSession(false))
   }, [])
 
+
+
   async function handleScrape() {
     if (!hasSession) {
-      toast.error("No LinkedIn session. Set up session in Settings first.")
+      toast.error("LinkedIn session expired or missing — go to Settings to re-authenticate.")
       return
     }
     setScraping(true)

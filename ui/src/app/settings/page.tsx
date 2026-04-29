@@ -68,15 +68,15 @@ const APPLICANT_OPTIONS = [
 export default function SettingsPage() {
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG)
   const [saving, setSaving] = useState(false)
-  const [sessionStatus, setSessionStatus] = useState<boolean | null>(null)
+  const [sessionStatus, setSessionStatus] = useState<{ has_session: boolean; expired: boolean } | null>(null)
   const [setupLoading, setSetupLoading] = useState(false)
   const [keywordsInput, setKeywordsInput] = useState("")
   const [blacklistInput, setBlacklistInput] = useState("")
 
   useEffect(() => {
     api.automation.sessionStatus()
-      .then(d => setSessionStatus(d.has_session))
-      .catch(() => setSessionStatus(false))
+      .then(d => setSessionStatus(d))
+      .catch(() => setSessionStatus({ has_session: false, expired: false }))
 
     const saved = localStorage.getItem("apply4me_config")
     if (saved) {
@@ -190,10 +190,15 @@ export default function SettingsPage() {
             <div className="flex items-center gap-3">
               {sessionStatus === null ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
-              ) : sessionStatus ? (
+              ) : sessionStatus.has_session ? (
                 <div className="flex items-center gap-2 text-green-600">
                   <CheckCircle className="h-4 w-4" />
                   <span className="text-sm font-medium">Session active</span>
+                </div>
+              ) : sessionStatus.expired ? (
+                <div className="flex items-center gap-2 text-red-600">
+                  <XCircle className="h-4 w-4" />
+                  <span className="text-sm font-medium">Session expired — re-authenticate below</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-2 text-orange-500">
@@ -207,7 +212,7 @@ export default function SettingsPage() {
                 ) : (
                   <Terminal className="h-4 w-4 mr-1.5" />
                 )}
-                {sessionStatus ? "Re-authenticate" : "Set Up Session"}
+                {sessionStatus?.has_session ? "Re-authenticate" : "Set Up Session"}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
