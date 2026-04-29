@@ -14,6 +14,9 @@ APP_ROOT = os.environ.get("APP_ROOT", str(Path(__file__).parents[3]))
 
 router = APIRouter()
 
+# In-process scrape state — tracks the active scrape subprocess
+_scrape_proc: subprocess.Popen | None = None
+
 
 class ScrapeRequest(BaseModel):
     keywords: list[str] = []
@@ -52,8 +55,10 @@ async def session_status():
 @router.post("/scrape")
 async def trigger_scrape(req: ScrapeRequest):
     """Trigger LinkedIn job scraper."""
+    global _scrape_proc
+    if _scrape_proc is not None and _scrape_proc.poll() is None:
+        return {"status": "already_running", "pid": _scrape_proc.pid}
     try:
-        import json
         config = json.dumps({
             "keywords": req.keywords,
             "location": req.location,
@@ -63,13 +68,27 @@ async def trigger_scrape(req: ScrapeRequest):
             "work_types": req.work_types,
             "max_applicants": req.max_applicants,
         })
-        proc = subprocess.Popen(
+        _scrape_proc = subprocess.Popen(
             [sys.executable, "-m", "pw.scrapers.linkedin", "--config", config],
             cwd=APP_ROOT
         )
-        return {"status": "started", "pid": proc.pid}
+        return {"status": "started", "pid": _scrape_proc.pid}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/scrape-status")
+async def scrape_status():
+    """Returns whether a scrape subprocess is currently running."""
+    global _scrape_proc
+    if _scrape_proc is None:
+        return {"running": False}
+    code = _scrape_proc.poll()
+    if code is None:
+        return {"running": True, "pid": _scrape_proc.pid}
+    # Process finished
+    _scrape_proc = None
+    return {"running": False}
 
 
 @router.post("/save-config")

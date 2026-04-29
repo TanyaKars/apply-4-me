@@ -110,6 +110,7 @@ export const api = {
   automation: {
     sessionStatus: () => request<{ has_session: boolean }>("/api/automation/session-status"),
     setupSession: () => request<{ status: string; message: string }>("/api/automation/setup-session", { method: "POST" }),
+    scrapeStatus: () => request<{ running: boolean; pid?: number }>("/api/automation/scrape-status"),
     scrape: (config: {
       keywords: string[]
       location?: string

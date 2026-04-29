@@ -161,6 +161,15 @@ async def extract_job_detail(page: Page, job_url: str) -> dict:
                 ats_url = job_url  # apply on LinkedIn itself
                 ats_type = "easy_apply"
 
+        # Closed check — skip jobs no longer accepting applications
+        closed = await page.evaluate("""() => {
+            const body = document.body.innerText.toLowerCase();
+            return body.includes('no longer accepting applications') ||
+                   body.includes('not accepting applications');
+        }""")
+        if closed:
+            return {"closed": True, "jd_text": "", "ats_url": "", "ats_type": "unknown", "applicant_count": None}
+
         # Applicant count — text like "42 applicants" / "Over 200 applicants" / "Be among the first 25"
         # LinkedIn changes class names frequently, so walk all text nodes for "applicant"
         applicant_count: int | None = None
@@ -284,10 +293,31 @@ async def scrape(config: dict):
             cards = [c for c in cards if _location_ok(c.get("location", ""))]
             print(f"Location filter ({country}): {before} → {len(cards)} cards")
 
+        # Filter by work type keywords in the job title.
+        # LinkedIn's f_WT filter leaks jobs — catch what slips through by
+        # rejecting titles that explicitly mention excluded work types.
+        if work_types and not any(wt in work_types for wt in ("onsite", "hybrid")):
+            # User wants remote only — drop cards that say otherwise in the title
+            ONSITE_KEYWORDS = {
+                "on-site", "onsite", "on site", "in-person", "in person",
+                "hybrid", "office-based", "office based", "must be local",
+            }
+            def _title_is_remote(title: str) -> bool:
+                t = title.lower()
+                return not any(kw in t for kw in ONSITE_KEYWORDS)
+
+            before = len(cards)
+            cards = [c for c in cards if _title_is_remote(c.get("title", ""))]
+            print(f"Work type title filter (remote only): {before} → {len(cards)} cards")
+
         enriched = []
         for i, card in enumerate(cards[:50]):
             print(f"  [{i+1}/{len(cards)}] {card['title']} @ {card['company']}")
             detail = await extract_job_detail(page, card["url"])
+
+            if detail.get("closed"):
+                print(f"    Skipping — no longer accepting applications")
+                continue
 
             # Filter by applicant count if set
             count = detail.get("applicant_count")

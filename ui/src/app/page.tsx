@@ -27,6 +27,7 @@ export default function HomePage() {
   const [search, setSearch] = useState("")
   const [hasSession, setHasSession] = useState<boolean | null>(null)
   const [clearing, setClearing] = useState(false)
+  const [scrapeMsg, setScrapeMsg] = useState("")
 
   const loadJobs = useCallback(async () => {
     try {
@@ -74,8 +75,26 @@ export default function HomePage() {
       })
 
       const wtLabel = workTypes.length ? workTypes.join(", ") : "any type"
-      toast.success(`Scraping: ${keywords.join(", ")} · ${location} · ${wtLabel}`)
-      setTimeout(() => { loadJobs(); setScraping(false) }, 5000)
+      setScrapeMsg(`${keywords.join(", ")} · ${location} · ${wtLabel}`)
+
+      // Poll until the subprocess finishes, then refresh the job list
+      const poll = async () => {
+        try {
+          const status = await api.automation.scrapeStatus()
+          if (status.running) {
+            setTimeout(poll, 5000)
+          } else {
+            await loadJobs()
+            setScraping(false)
+            setScrapeMsg("")
+            toast.success("Scrape finished — job list updated")
+          }
+        } catch {
+          setScraping(false)
+          setScrapeMsg("")
+        }
+      }
+      setTimeout(poll, 5000)
     } catch {
       toast.error("Failed to start scrape")
       setScraping(false)
@@ -145,12 +164,14 @@ export default function HomePage() {
             </Button>
           )}
           <Button size="sm" onClick={handleScrape} disabled={scraping}>
-            {scraping ? (
-              <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
-            ) : (
-              <Search className="h-4 w-4 mr-1.5" />
-            )}
-            {scraping ? "Scraping..." : "Scrape Jobs"}
+            {scraping
+              ? <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+              : <Search className="h-4 w-4 mr-1.5" />
+            }
+            {scraping
+              ? scrapeMsg ? `Scraping: ${scrapeMsg}` : "Scraping..."
+              : "Scrape Jobs"
+            }
           </Button>
         </div>
       </div>
