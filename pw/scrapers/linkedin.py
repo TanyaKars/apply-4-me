@@ -132,12 +132,13 @@ async def extract_job_detail(page: Page, job_url: str) -> dict:
         )
         jd_text = await jd_el.first.inner_text() if await jd_el.count() > 0 else ""
 
-        # External ATS apply URL
+        # External ATS apply URL — only match known ATS domains, never LinkedIn-internal links
         apply_btn = page.locator(
             "a[href*='greenhouse.io'], a[href*='lever.co'], "
             "a[href*='ashbyhq.com'], a[href*='workday.com'], "
             "a[href*='icims.com'], a[href*='taleo.net'], "
-            "a.apply-button[href], a[data-tracking-control-name*='apply']"
+            "a[href*='smartrecruiters.com'], a[href*='jobvite.com'], "
+            "a.apply-button[href*='http']"
         )
         ats_url = ""
         ats_type = "unknown"
@@ -152,6 +153,13 @@ async def extract_job_detail(page: Page, job_url: str) -> dict:
                 if keyword in ats_url:
                     ats_type = name
                     break
+
+        # If no external ATS found, check for LinkedIn Easy Apply
+        if ats_type == "unknown":
+            easy_apply = page.locator("button:has-text('Easy Apply')")
+            if await easy_apply.count() > 0:
+                ats_url = job_url  # apply on LinkedIn itself
+                ats_type = "easy_apply"
 
         # Applicant count — text like "42 applicants" / "Over 200 applicants" / "Be among the first 25"
         # LinkedIn changes class names frequently, so walk all text nodes for "applicant"

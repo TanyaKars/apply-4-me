@@ -82,7 +82,7 @@ async def save_config(payload: dict):
     return {"ok": True}
 
 
-SUPPORTED_ATS = {"greenhouse", "lever", "ashby", "workday"}
+SUPPORTED_ATS = {"greenhouse", "lever", "ashby", "workday", "easy_apply"}
 
 
 @router.post("/apply/{job_id}")
@@ -94,7 +94,9 @@ async def trigger_apply(job_id: int, session: Session = Depends(get_session)):
 
     # Return early if no automation adapter exists for this ATS type
     if job.ats_type not in SUPPORTED_ATS:
-        apply_url = job.ats_url or job.url or ""
+        # For unsupported ATS types the stored ats_url is unreliable
+        # (LinkedIn redirects, signup pages, etc.) — always use the job page URL.
+        apply_url = job.url or ""
         raise HTTPException(
             status_code=422,
             detail={

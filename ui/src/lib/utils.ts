@@ -25,5 +25,6 @@ export const ATS_COLORS: Record<string, string> = {
   lever: "bg-orange-50 text-orange-700 border-orange-200",
   ashby: "bg-violet-50 text-violet-700 border-violet-200",
   workday: "bg-cyan-50 text-cyan-700 border-cyan-200",
+  easy_apply: "bg-blue-50 text-blue-700 border-blue-200",
   unknown: "bg-gray-50 text-gray-500 border-gray-200",
 }

@@ -73,6 +73,16 @@ def update_job(job_id: int, update: JobUpdate, session: Session = Depends(get_se
     return job
 
 
+@router.delete("/clear-new")
+def clear_new_jobs(session: Session = Depends(get_session)):
+    """Delete all jobs with status 'new', preserving approved/applied/skipped."""
+    jobs = session.exec(select(Job).where(Job.status == JobStatus.new)).all()
+    for job in jobs:
+        session.delete(job)
+    session.commit()
+    return {"deleted": len(jobs)}
+
+
 @router.delete("/{job_id}")
 def delete_job(job_id: int, session: Session = Depends(get_session)):
     job = session.get(Job, job_id)

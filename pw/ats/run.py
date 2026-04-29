@@ -24,13 +24,20 @@ async def apply_to_job(job_id: int):
         resp.raise_for_status()
         job = resp.json()
 
+    # Use the stored ats_type — re-detecting from the URL fails for LinkedIn Easy Apply
+    # because linkedin.com URLs don't match any ATS pattern.
+    ats_type = job.get("ats_type") or "unknown"
     ats_url = job.get("ats_url") or job.get("url")
+
+    # Fall back to URL-based detection only when stored type is unknown
+    if ats_type == "unknown" and ats_url:
+        ats_type = detect_ats(ats_url)
+
+    print(f"ATS type: {ats_type}  URL: {ats_url}")
+
     if not ats_url:
         print("No ATS URL found for this job.")
         return
-
-    ats_type = detect_ats(ats_url)
-    print(f"Detected ATS: {ats_type} for URL: {ats_url}")
 
     AdapterClass = get_adapter(ats_type)
     if not AdapterClass:
@@ -58,8 +65,10 @@ async def apply_to_job(job_id: int):
         await context.add_cookies(cookies)
         page = await context.new_page()
 
+        # For easy_apply, always navigate to the job page itself, not any cached ats_url
+        apply_target = job.get("url") if ats_type == "easy_apply" else ats_url
         adapter = AdapterClass(page, resume_data, pdf_path)
-        success = await adapter.fill_form(ats_url)
+        success = await adapter.fill_form(apply_target)
 
         if success:
             # Update job status

@@ -41,10 +41,12 @@ def get_adapter(ats_type: str):
     from pw.ats.greenhouse import GreenhouseAdapter
     from pw.ats.lever import LeverAdapter
     from pw.ats.ashby import AshbyAdapter
+    from pw.ats.easy_apply import LinkedInEasyApplyAdapter
 
     adapters = {
         "greenhouse": GreenhouseAdapter,
         "lever": LeverAdapter,
         "ashby": AshbyAdapter,
+        "easy_apply": LinkedInEasyApplyAdapter,
     }
     return adapters.get(ats_type)

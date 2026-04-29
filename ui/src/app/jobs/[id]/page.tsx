@@ -115,19 +115,33 @@ export default function JobDetailPage() {
       await api.automation.apply(Number(id))
       toast.success("Application started — check the browser window")
     } catch (e: any) {
-      // Parse 422 "unsupported ATS" — open the job URL for manual apply
+      // Try to parse the structured 422 detail
+      let detail: { reason?: string; ats_type?: string; apply_url?: string; message?: string } | null = null
       try {
         const match = e?.message?.match(/API error 422: (.+)/)
-        if (match) {
-          const detail = JSON.parse(match[1])?.detail
-          if (detail?.reason === "unsupported_ats" && detail?.apply_url) {
-            window.open(detail.apply_url, "_blank", "noopener,noreferrer")
-            toast.info("No automation for this ATS — opened the application page for you")
-            return
-          }
-        }
+        if (match) detail = JSON.parse(match[1])?.detail
       } catch {}
-      toast.error("Failed to start application")
+
+      if (detail?.reason === "unsupported_ats") {
+        const url = detail.apply_url || job?.url || ""
+        const atsLabel = detail.ats_type && detail.ats_type !== "unknown"
+          ? `${detail.ats_type} application`
+          : "application"
+        toast.warning(
+          url
+            ? `Can't automate this ${atsLabel} — click to open it manually`
+            : "Can't automate this application — no supported ATS detected",
+          url ? {
+            action: {
+              label: "Open & Apply",
+              onClick: () => window.open(url, "_blank", "noopener,noreferrer"),
+            },
+            duration: 10000,
+          } : { duration: 6000 }
+        )
+      } else {
+        toast.error(`Apply failed: ${e?.message ?? "unknown error"}`)
+      }
     } finally {
       setApplyLoading(false)
     }

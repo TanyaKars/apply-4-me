@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { toast } from "sonner"
 import {
-  RefreshCw, Search, Wifi, WifiOff, Plus
+  RefreshCw, Search, Wifi, WifiOff, Trash2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,6 +26,7 @@ export default function HomePage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [search, setSearch] = useState("")
   const [hasSession, setHasSession] = useState<boolean | null>(null)
+  const [clearing, setClearing] = useState(false)
 
   const loadJobs = useCallback(async () => {
     try {
@@ -81,6 +82,20 @@ export default function HomePage() {
     }
   }
 
+  async function handleClearNew() {
+    if (!confirm(`Delete all ${counts.new} new jobs? Approved, applied, and skipped jobs will be kept.`)) return
+    setClearing(true)
+    try {
+      const result = await api.jobs.clearNew()
+      toast.success(`Cleared ${result.deleted} new jobs`)
+      loadJobs()
+    } catch {
+      toast.error("Failed to clear jobs")
+    } finally {
+      setClearing(false)
+    }
+  }
+
   function handleJobUpdate(updated: Job) {
     setJobs(prev => prev.map(j => j.id === updated.id ? updated : j))
   }
@@ -122,6 +137,13 @@ export default function HomePage() {
             <RefreshCw className="h-4 w-4 mr-1.5" />
             Refresh
           </Button>
+          {counts.new > 0 && (
+            <Button variant="outline" size="sm" onClick={handleClearNew} disabled={clearing}
+              className="text-destructive border-destructive/30 hover:bg-destructive/10">
+              <Trash2 className="h-4 w-4 mr-1.5" />
+              Clear new ({counts.new})
+            </Button>
+          )}
           <Button size="sm" onClick={handleScrape} disabled={scraping}>
             {scraping ? (
               <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
