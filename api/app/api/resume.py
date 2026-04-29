@@ -18,12 +18,13 @@ def get_resume_settings(session: Session) -> dict:
     """Return template + photo settings (not resume data)."""
     config = session.exec(select(ResumeConfig).where(ResumeConfig.name == "default")).first()
     if not config:
-        return {"template": "modern", "include_photo": False, "photo_path": ""}
+        return {"template": "modern", "include_photo": False, "photo_path": "", "group_experience": False}
     data = json.loads(config.data) if config.data else {}
     return {
         "template": config.template,
         "include_photo": config.include_photo,
         "photo_path": data.get("personal", {}).get("photo_path", ""),
+        "group_experience": data.get("group_experience", False),
     }
 
 
@@ -47,6 +48,7 @@ def save_settings(payload: dict, session: Session = Depends(get_session)):
         config.include_photo = payload.get("include_photo", config.include_photo)
         existing = json.loads(config.data) if config.data else {}
         existing.setdefault("personal", {})["photo_path"] = payload.get("photo_path", "")
+        existing["group_experience"] = payload.get("group_experience", False)
         config.data = json.dumps(existing)
     session.add(config)
     session.commit()
@@ -105,6 +107,7 @@ async def generate_pdf(session: Session = Depends(get_session)):
         resume_data,
         template=settings["template"],
         include_photo=settings["include_photo"],
+        group_experience=settings.get("group_experience", False),
     )
     return {"pdf_path": str(pdf_path)}
 

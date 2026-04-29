@@ -7,8 +7,6 @@ Usage:
 import asyncio
 import json
 import sys
-import time
-from typing import Optional
 from urllib.parse import quote
 
 import httpx
@@ -30,107 +28,116 @@ def build_linkedin_search_url(keywords: list[str], location: str, date_posted: s
     }
     time_filter = time_filter_map.get(date_posted, "r604800")
 
+    # No f_LF filter — include all jobs, not just Easy Apply
     return (
         f"https://www.linkedin.com/jobs/search/"
-        f"?keywords={kw}&location={loc}&f_TPR={time_filter}&f_LF=f_AL"
+        f"?keywords={kw}&location={loc}&f_TPR={time_filter}"
     )
 
 
 async def scroll_to_load_all(page: Page, max_scrolls: int = 10):
-    """Scroll the job list container to load more results."""
     for _ in range(max_scrolls):
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         await page.wait_for_timeout(1500)
-
-        # Try clicking "Show more jobs" button if it exists
-        btn = page.locator("button.infinite-scroller__show-more-button")
+        # "Show more jobs" button (class varies — match loosely)
+        btn = page.locator("button:has-text('Show more jobs')")
         if await btn.is_visible():
             await btn.click()
             await page.wait_for_timeout(2000)
 
 
 async def extract_job_cards(page: Page) -> list[dict]:
-    """Extract job cards from LinkedIn search results page."""
-    cards = []
+    """Extract job cards via JS — class-name-agnostic, works with current LinkedIn HTML."""
+    cards = await page.evaluate("""() => {
+        const results = [];
+        const seen = new Set();
 
-    job_list = page.locator("ul.jobs-search__results-list li, div.job-search-card")
-    count = await job_list.count()
+        // All job-detail links are reliable anchors regardless of class name changes
+        const links = document.querySelectorAll('a[href*="/jobs/view/"]');
 
-    for i in range(min(count, 50)):
-        try:
-            card = job_list.nth(i)
+        for (const link of links) {
+            const href = link.href.split('?')[0];
+            if (!href || seen.has(href)) continue;
+            seen.add(href);
 
-            title_el = card.locator("h3.base-search-card__title, a.job-card-list__title")
-            company_el = card.locator("h4.base-search-card__subtitle, a.job-card-container__company-name")
-            location_el = card.locator("span.job-search-card__location, li.job-card-container__metadata-item")
-            link_el = card.locator("a.base-card__full-link, a[href*='/jobs/view/']")
+            // Title: text of the link or its first strong/span child
+            const title = (
+                link.querySelector('strong, span[aria-hidden="true"]')?.innerText ||
+                link.innerText
+            ).trim();
+            if (!title) continue;
 
-            title = await title_el.first.inner_text() if await title_el.count() > 0 else ""
-            company = await company_el.first.inner_text() if await company_el.count() > 0 else ""
-            location = await location_el.first.inner_text() if await location_el.count() > 0 else ""
-            href = await link_el.first.get_attribute("href") if await link_el.count() > 0 else ""
+            // Walk up to the card container (li or div with job-card in class)
+            let card = link.parentElement;
+            for (let i = 0; i < 6 && card; i++) {
+                const tag = card.tagName;
+                const cls = card.className || '';
+                if (tag === 'LI' || cls.includes('job-card') || cls.includes('jobs-search-results__list-item')) break;
+                card = card.parentElement;
+            }
+            if (!card) card = link.parentElement;
 
-            title = title.strip()
-            company = company.strip()
-            location = location.strip()
+            // Company
+            const companyEl = card.querySelector(
+                'a[href*="/company/"], [class*="company"], [class*="primary-description"], [class*="subtitle"]'
+            );
+            const company = companyEl?.innerText.trim() || '';
 
-            # Clean LinkedIn URL — remove tracking params
-            if href and "?" in href:
-                href = href.split("?")[0]
+            // Location
+            const locEl = card.querySelector(
+                '[class*="metadata-item"], [class*="location"], [class*="workplace-type"], li'
+            );
+            const location = locEl?.innerText.trim() || '';
 
-            if title and href:
-                cards.append({
-                    "title": title,
-                    "company": company,
-                    "location": location,
-                    "url": href,
-                })
-        except Exception:
-            continue
+            results.push({ title, company, location, url: href });
+        }
 
+        return results;
+    }""")
     return cards
 
 
 async def extract_job_detail(page: Page, job_url: str) -> dict:
-    """Open a job detail page and extract JD text + external apply URL."""
+    """Open job page and extract JD text + external apply URL."""
     try:
         await page.goto(job_url, wait_until="domcontentloaded", timeout=30_000)
         await page.wait_for_timeout(2000)
 
-        # Extract JD text
-        jd_el = page.locator("div.description__text, div.jobs-description__content, div#job-details")
-        jd_text = ""
-        if await jd_el.count() > 0:
-            jd_text = await jd_el.first.inner_text()
+        # JD text
+        jd_el = page.locator(
+            "div.description__text, div.jobs-description__content, "
+            "div#job-details, article.jobs-description__container"
+        )
+        jd_text = await jd_el.first.inner_text() if await jd_el.count() > 0 else ""
 
-        # Find external apply URL (non Easy-Apply jobs have "Apply" button with external URL)
-        apply_btn = page.locator("a.apply-button, a[href*='greenhouse'], a[href*='lever.co'], a[href*='ashbyhq'], a[href*='workday']")
+        # External ATS apply URL
+        apply_btn = page.locator(
+            "a[href*='greenhouse.io'], a[href*='lever.co'], "
+            "a[href*='ashbyhq.com'], a[href*='workday.com'], "
+            "a[href*='icims.com'], a[href*='taleo.net'], "
+            "a.apply-button[href], a[data-tracking-control-name*='apply']"
+        )
         ats_url = ""
         ats_type = "unknown"
 
         if await apply_btn.count() > 0:
             ats_url = await apply_btn.first.get_attribute("href") or ""
-            if "greenhouse" in ats_url:
-                ats_type = "greenhouse"
-            elif "lever.co" in ats_url:
-                ats_type = "lever"
-            elif "ashby" in ats_url:
-                ats_type = "ashby"
-            elif "workday" in ats_url:
-                ats_type = "workday"
+            for keyword, name in [
+                ("greenhouse", "greenhouse"), ("lever.co", "lever"),
+                ("ashby", "ashby"), ("workday", "workday"),
+                ("icims", "icims"), ("taleo", "taleo"),
+            ]:
+                if keyword in ats_url:
+                    ats_type = name
+                    break
 
-        return {
-            "jd_text": jd_text.strip(),
-            "ats_url": ats_url,
-            "ats_type": ats_type,
-        }
+        return {"jd_text": jd_text.strip(), "ats_url": ats_url, "ats_type": ats_type}
     except Exception as e:
         print(f"  Error extracting detail from {job_url}: {e}")
         return {"jd_text": "", "ats_url": "", "ats_type": "unknown"}
 
 
 async def post_jobs_to_backend(jobs: list[dict]):
-    """POST scraped jobs to backend for deduplication and storage."""
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             resp = await client.post(f"{BACKEND_URL}/api/jobs/bulk", json=jobs)
@@ -157,36 +164,36 @@ async def scrape(config: dict):
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                       "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
         await context.add_cookies(cookies)
 
         page = await context.new_page()
         print(f"Navigating to: {search_url}")
         await page.goto(search_url, wait_until="domcontentloaded", timeout=30_000)
-        await page.wait_for_timeout(3000)
+        await page.wait_for_timeout(4000)
 
         await scroll_to_load_all(page)
 
         cards = await extract_job_cards(page)
         print(f"Found {len(cards)} job cards")
 
-        # Filter blacklisted companies
         cards = [c for c in cards if c["company"] not in blacklist]
 
-        # Enrich each card with JD + ATS URL
         enriched = []
-        for i, card in enumerate(cards):
-            print(f"  [{i+1}/{len(cards)}] Getting details: {card['title']} @ {card['company']}")
+        for i, card in enumerate(cards[:50]):
+            print(f"  [{i+1}/{len(cards)}] {card['title']} @ {card['company']}")
             detail = await extract_job_detail(page, card["url"])
             enriched.append({**card, **detail})
-            await asyncio.sleep(1.5)  # polite delay
+            await asyncio.sleep(1.5)
 
         await browser.close()
 
     if enriched:
         await post_jobs_to_backend(enriched)
 
+    print(f"Done. {len(enriched)} jobs processed.")
     return enriched
 
 

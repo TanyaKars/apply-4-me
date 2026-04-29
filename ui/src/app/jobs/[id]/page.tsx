@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
   ArrowLeft, Sparkles, Send, FileText, ExternalLink,
-  ChevronDown, ChevronUp, Loader2
+  ChevronDown, ChevronUp, Loader2, Eye
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -183,10 +183,11 @@ export default function JobDetailPage() {
         )}
       </div>
 
-      <Tabs defaultValue={tailored ? "tailored" : "jd"}>
+      <Tabs defaultValue={tailored ? "pdf" : "jd"}>
         <TabsList>
           <TabsTrigger value="jd">Job Description</TabsTrigger>
-          {tailored && <TabsTrigger value="tailored">Tailored Resume</TabsTrigger>}
+          {tailored && <TabsTrigger value="tailored">Resume (text)</TabsTrigger>}
+          {tailored && <TabsTrigger value="pdf"><Eye className="h-3.5 w-3.5 mr-1" />PDF Preview</TabsTrigger>}
           {job.cover_letter && <TabsTrigger value="cover">Cover Letter</TabsTrigger>}
         </TabsList>
 
@@ -224,6 +225,21 @@ export default function JobDetailPage() {
               </CardHeader>
               <CardContent>
                 <TailoredResumeView resume={tailored} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {tailored && (
+          <TabsContent value="pdf" className="mt-4">
+            <Card>
+              <CardContent className="p-0 overflow-hidden rounded-lg">
+                <iframe
+                  src={`http://localhost:8000/api/jobs/${id}/resume-pdf`}
+                  className="w-full border-0"
+                  style={{ height: "80vh" }}
+                  title="Resume PDF Preview"
+                />
               </CardContent>
             </Card>
           </TabsContent>

@@ -9,10 +9,23 @@ OUTPUT_DIR = Path.home() / ".apply4me" / "resumes"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _group_experience(experience: list) -> list:
+    """Group consecutive entries with the same company into one block."""
+    groups = []
+    for exp in experience:
+        company = exp.get("company", "")
+        if groups and groups[-1]["company"] == company:
+            groups[-1]["roles"].append(exp)
+        else:
+            groups.append({"company": company, "roles": [exp]})
+    return groups
+
+
 async def generate_pdf(
     resume_data: dict,
     template: str = "modern",
     include_photo: bool = False,
+    group_experience: bool = False,
     job_id: Optional[int] = None
 ) -> Path:
     """Render Jinja2 template -> WeasyPrint -> PDF."""
@@ -36,10 +49,14 @@ async def generate_pdf(
                 b64 = base64.b64encode(photo_path.read_bytes()).decode()
                 photo_data_uri = f"data:{mime};base64,{b64}"
 
+    experience_grouped = _group_experience(resume_data.get("experience", []))
+
     html_content = tmpl.render(
         resume=resume_data,
         include_photo=include_photo,
-        photo_data_uri=photo_data_uri
+        photo_data_uri=photo_data_uri,
+        group_experience=group_experience,
+        experience_grouped=experience_grouped,
     )
 
     filename = f"job_{job_id}.pdf" if job_id else "resume.pdf"

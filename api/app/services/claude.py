@@ -47,7 +47,8 @@ def _parse_json_response(text: str) -> dict:
 RESUME_JSON_SCHEMA = """{
   "personal": {
     "name": "...", "email": "...", "phone": "...", "location": "...",
-    "linkedin": "...", "github": "...", "photo_path": ""
+    "linkedin": "...", "github": "...", "photo_path": "",
+    "position": "exact job title from the JD"
   },
   "summary": "2-3 sentence professional summary",
   "experience": [
@@ -84,6 +85,7 @@ Instructions:
 - Do NOT fabricate experience, skills, or companies not mentioned in SKILL.md
 - Reorder skills so the most JD-relevant ones come first
 - Write the summary to directly address this specific role
+- Extract the exact job title from the JD and put it in personal.position
 
 Return ONLY valid JSON matching this schema, no explanation:
 {RESUME_JSON_SCHEMA}"""

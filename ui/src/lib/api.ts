@@ -94,8 +94,8 @@ export const api = {
     delete: (id: number) => request<{ ok: boolean }>(`/api/jobs/${id}`, { method: "DELETE" }),
   },
   resume: {
-    settings: () => request<{ template: string; include_photo: boolean; photo_path: string }>("/api/resume/settings"),
-    saveSettings: (s: { template: string; include_photo: boolean; photo_path: string }) =>
+    settings: () => request<{ template: string; include_photo: boolean; photo_path: string; group_experience: boolean }>("/api/resume/settings"),
+    saveSettings: (s: { template: string; include_photo: boolean; photo_path: string; group_experience: boolean }) =>
       request<{ ok: boolean }>("/api/resume/settings", { method: "PUT", body: JSON.stringify(s) }),
     skillMd: () => request<{ content: string; path: string; exists: boolean }>("/api/resume/skill-md"),
     parseSource: (source_path: string) =>

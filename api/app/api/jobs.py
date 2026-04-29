@@ -1,6 +1,8 @@
 import json
+from pathlib import Path
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi.responses import FileResponse
 from sqlmodel import Session, select
 from app.db import get_session
 from app.models import Job, JobCreate, JobUpdate, JobStatus
@@ -129,6 +131,7 @@ async def tailor_job(job_id: int, session: Session = Depends(get_session)):
         tailored,
         template=settings["template"],
         include_photo=settings["include_photo"],
+        group_experience=settings.get("group_experience", False),
         job_id=job.id,
     )
     job.tailored_resume_path = str(pdf_path)
@@ -170,3 +173,16 @@ def get_tailored_data(job_id: int, session: Session = Depends(get_session)):
         raise HTTPException(status_code=404, detail="Job not found")
     tailored = json.loads(job.tailored_data) if job.tailored_data else None
     return {"tailored": tailored}
+
+
+@router.get("/{job_id}/resume-pdf")
+def get_resume_pdf(job_id: int, session: Session = Depends(get_session)):
+    job = session.get(Job, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.tailored_resume_path:
+        raise HTTPException(status_code=404, detail="No PDF generated yet")
+    path = Path(job.tailored_resume_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"PDF file not found at {path}")
+    return FileResponse(path, media_type="application/pdf", filename=path.name)

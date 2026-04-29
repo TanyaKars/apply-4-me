@@ -3,107 +3,145 @@
 <head>
 <meta charset="UTF-8">
 <style>
+  @page {
+    size: letter;
+    margin: 16mm 16mm 14mm 16mm;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: 'Helvetica Neue', Arial, sans-serif;
-    font-size: 10pt;
+    font-size: 9.5pt;
     color: #1a1a1a;
     background: white;
-    line-height: 1.4;
+    line-height: 1.45;
   }
-  .page {
-    width: 210mm;
-    min-height: 297mm;
-    padding: 14mm 14mm 12mm 14mm;
-  }
-  /* Header */
+
+  /* ── Header ── */
   .header {
     display: flex;
     align-items: flex-start;
-    gap: 16px;
+    gap: 14px;
     border-bottom: 2.5px solid #2563eb;
-    padding-bottom: 12px;
-    margin-bottom: 14px;
+    padding-bottom: 10px;
+    margin-bottom: 12px;
   }
   .photo {
-    width: 68px;
-    height: 68px;
-    border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
+    width: 64px; height: 64px;
+    border-radius: 50%; object-fit: cover; flex-shrink: 0;
     border: 2px solid #2563eb;
   }
-  .header-info { flex: 1; }
-  .name {
-    font-size: 22pt;
-    font-weight: 700;
-    color: #111827;
-    letter-spacing: -0.5px;
-  }
+  .header-info { flex: 1; min-width: 0; text-align: center; }
+  .name { font-size: 20pt; font-weight: 700; color: #111827; letter-spacing: -0.3px; }
+  .position { font-size: 10pt; font-weight: 400; color: #4b5563; margin-top: 1px; }
   .contact {
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px 14px;
-    margin-top: 4px;
-    font-size: 8.5pt;
+    flex-wrap: nowrap;
+    justify-content: center;
+    align-items: center;
+    gap: 0 10px;
+    margin-top: 5px;
+    font-size: 7.5pt;
     color: #6b7280;
+    overflow: hidden;
   }
-  .contact span::before { content: ""; }
-  /* Sections */
-  .section { margin-bottom: 12px; }
+  .contact a { color: #6b7280; text-decoration: none; }
+  .contact-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: #6b7280;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .contact-icon svg { vertical-align: middle; flex-shrink: 0; }
+
+  /* ── Sections ── */
+  .section { margin-bottom: 10px; }
   .section-title {
-    font-size: 10pt;
+    font-size: 9pt;
     font-weight: 700;
     color: #2563eb;
     text-transform: uppercase;
     letter-spacing: 1.2px;
     border-bottom: 1px solid #dbeafe;
     padding-bottom: 2px;
-    margin-bottom: 7px;
+    margin-bottom: 6px;
+    text-align: center;
   }
-  /* Summary */
-  .summary { font-size: 9.5pt; color: #374151; }
-  /* Experience */
-  .exp-item { margin-bottom: 9px; }
-  .exp-header { display: flex; justify-content: space-between; align-items: baseline; }
-  .exp-title { font-weight: 600; font-size: 10pt; }
-  .exp-company { color: #2563eb; font-size: 9.5pt; }
-  .exp-dates { font-size: 8.5pt; color: #9ca3af; white-space: nowrap; }
-  .exp-bullets { margin-top: 3px; padding-left: 14px; }
-  .exp-bullets li {
-    font-size: 9pt;
-    color: #374151;
-    margin-bottom: 2px;
-    list-style-type: disc;
-  }
-  /* Education */
-  .edu-item { display: flex; justify-content: space-between; margin-bottom: 5px; }
-  .edu-left { }
-  .edu-degree { font-weight: 600; font-size: 9.5pt; }
-  .edu-school { font-size: 9pt; color: #6b7280; }
-  .edu-year { font-size: 8.5pt; color: #9ca3af; }
-  /* Skills */
-  .skills-grid {
+
+  /* ── Summary ── */
+  .summary { font-size: 9pt; color: #374151; }
+
+  /* ── Experience ── */
+  .exp-item { margin-bottom: 8px; }
+  .exp-header {
     display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
     flex-wrap: wrap;
-    gap: 5px;
   }
+  .exp-left { min-width: 0; }
+  .exp-title { font-weight: 600; font-size: 9.5pt; }
+  .exp-company { color: #2563eb; font-size: 9pt; }
+  .exp-dates { font-size: 8pt; color: #9ca3af; white-space: nowrap; flex-shrink: 0; }
+  .exp-bullets { margin-top: 3px; padding-left: 13px; }
+  .exp-bullets li {
+    font-size: 8.5pt;
+    color: #374151;
+    margin-bottom: 1.5px;
+    list-style-type: disc;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  /* ── Grouped experience ── */
+  .exp-group { margin-bottom: 9px; }
+  .exp-group-company {
+    font-weight: 700;
+    font-size: 9.5pt;
+    color: #2563eb;
+    margin-bottom: 4px;
+  }
+  .exp-role {
+    padding-left: 10px;
+    border-left: 2px solid #dbeafe;
+    margin-bottom: 5px;
+  }
+  .exp-role-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* ── Education ── */
+  .edu-item { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+  .edu-left { min-width: 0; }
+  .edu-degree { font-weight: 600; font-size: 9pt; }
+  .edu-sep { font-size: 9pt; color: #9ca3af; }
+  .edu-school { font-size: 9pt; color: #6b7280; }
+  .edu-year { font-size: 8pt; color: #9ca3af; white-space: nowrap; flex-shrink: 0; }
+
+  /* ── Skills ── */
+  .skills-grid { display: flex; flex-wrap: wrap; gap: 4px; }
   .skill-tag {
     background: #eff6ff;
     color: #1d4ed8;
-    border: 1px solid #bfdbfe;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 8.5pt;
+    padding: 1.5px 7px;
+    border-radius: 10px;
+    font-size: 8pt;
   }
-  /* Certs */
-  .cert-item { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 9pt; }
+
+  /* ── Certs ── */
+  .cert-item { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 3px; font-size: 8.5pt; }
   .cert-name { font-weight: 500; }
-  .cert-meta { color: #9ca3af; font-size: 8.5pt; }
+  .cert-meta { color: #9ca3af; font-size: 8pt; white-space: nowrap; }
 </style>
 </head>
 <body>
-<div class="page">
+
   <!-- Header -->
   <div class="header">
     {% if include_photo and photo_data_uri %}
@@ -111,18 +149,45 @@
     {% endif %}
     <div class="header-info">
       <div class="name">{{ resume.personal.name }}</div>
+      {% if resume.personal.position %}
+      <div class="position">{{ resume.personal.position }}</div>
+      {% endif %}
       <div class="contact">
-        {% if resume.personal.email %}<span>{{ resume.personal.email }}</span>{% endif %}
-        {% if resume.personal.phone %}<span>{{ resume.personal.phone }}</span>{% endif %}
-        {% if resume.personal.location %}<span>{{ resume.personal.location }}</span>{% endif %}
-        {% if resume.personal.linkedin %}<span>{{ resume.personal.linkedin }}</span>{% endif %}
-        {% if resume.personal.github %}<span>{{ resume.personal.github }}</span>{% endif %}
+        {% if resume.personal.email %}
+        <a class="contact-icon" href="mailto:{{ resume.personal.email }}">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+          {{ resume.personal.email }}
+        </a>
+        {% endif %}
+        {% if resume.personal.phone %}
+        <a class="contact-icon" href="tel:{{ resume.personal.phone }}">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.99 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.9 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+          {{ resume.personal.phone }}
+        </a>
+        {% endif %}
+        {% if resume.personal.location %}
+        <span class="contact-icon">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+          {{ resume.personal.location }}
+        </span>
+        {% endif %}
+        {% if resume.personal.linkedin %}
+        <a class="contact-icon" href="{{ resume.personal.linkedin }}">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
+          LinkedIn
+        </a>
+        {% endif %}
+        {% if resume.personal.github %}
+        <a class="contact-icon" href="{{ resume.personal.github }}">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+          GitHub
+        </a>
+        {% endif %}
       </div>
     </div>
   </div>
 
   {% if resume.summary %}
-  <!-- Summary -->
   <div class="section">
     <div class="section-title">Summary</div>
     <div class="summary">{{ resume.summary }}</div>
@@ -130,39 +195,82 @@
   {% endif %}
 
   {% if resume.experience %}
-  <!-- Experience -->
   <div class="section">
     <div class="section-title">Experience</div>
-    {% for exp in resume.experience %}
-    <div class="exp-item">
-      <div class="exp-header">
-        <div>
-          <span class="exp-title">{{ exp.title }}</span>
-          {% if exp.company %} · <span class="exp-company">{{ exp.company }}</span>{% endif %}
+
+    {% if group_experience %}
+      {% for group in experience_grouped %}
+      <div class="exp-group">
+        {% if group.roles | length > 1 %}
+        <div class="exp-group-company">{{ group.company }}</div>
+        {% for role in group.roles %}
+        <div class="exp-role">
+          <div class="exp-role-header">
+            <span class="exp-title">{{ role.title }}</span>
+            <span class="exp-dates">{{ role.dates }}</span>
+          </div>
+          {% if role.bullets %}
+          <ul class="exp-bullets">
+            {% for bullet in role.bullets %}
+            <li>{{ bullet }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
         </div>
-        <div class="exp-dates">{{ exp.dates }}</div>
-      </div>
-      {% if exp.bullets %}
-      <ul class="exp-bullets">
-        {% for bullet in exp.bullets %}
-        <li>{{ bullet }}</li>
         {% endfor %}
-      </ul>
-      {% endif %}
-    </div>
-    {% endfor %}
+        {% else %}
+        {% set exp = group.roles[0] %}
+        <div class="exp-item">
+          <div class="exp-header">
+            <div class="exp-left">
+              <span class="exp-title">{{ exp.title }}</span>
+              {% if exp.company %} · <span class="exp-company">{{ exp.company }}</span>{% endif %}
+            </div>
+            <div class="exp-dates">{{ exp.dates }}</div>
+          </div>
+          {% if exp.bullets %}
+          <ul class="exp-bullets">
+            {% for bullet in exp.bullets %}
+            <li>{{ bullet }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    {% else %}
+      {% for exp in resume.experience %}
+      <div class="exp-item">
+        <div class="exp-header">
+          <div class="exp-left">
+            <span class="exp-title">{{ exp.title }}</span>
+            {% if exp.company %} · <span class="exp-company">{{ exp.company }}</span>{% endif %}
+          </div>
+          <div class="exp-dates">{{ exp.dates }}</div>
+        </div>
+        {% if exp.bullets %}
+        <ul class="exp-bullets">
+          {% for bullet in exp.bullets %}
+          <li>{{ bullet }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+      {% endfor %}
+    {% endif %}
+
   </div>
   {% endif %}
 
   {% if resume.education %}
-  <!-- Education -->
   <div class="section">
     <div class="section-title">Education</div>
     {% for edu in resume.education %}
     <div class="edu-item">
       <div class="edu-left">
-        <div class="edu-degree">{{ edu.degree }}</div>
-        <div class="edu-school">{{ edu.school }}</div>
+        <span class="edu-degree">{{ edu.degree }}</span>
+        {% if edu.school %}<span class="edu-sep"> · </span><span class="edu-school">{{ edu.school }}</span>{% endif %}
       </div>
       <div class="edu-year">{{ edu.year }}</div>
     </div>
@@ -171,7 +279,6 @@
   {% endif %}
 
   {% if resume.skills %}
-  <!-- Skills -->
   <div class="section">
     <div class="section-title">Skills</div>
     <div class="skills-grid">
@@ -183,7 +290,6 @@
   {% endif %}
 
   {% if resume.certifications %}
-  <!-- Certifications -->
   <div class="section">
     <div class="section-title">Certifications</div>
     {% for cert in resume.certifications %}
@@ -195,6 +301,5 @@
   </div>
   {% endif %}
 
-</div>
 </body>
 </html>

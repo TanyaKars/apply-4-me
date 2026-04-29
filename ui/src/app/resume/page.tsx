@@ -12,7 +12,7 @@ import { api } from "@/lib/api"
 
 export default function ResumePage() {
   const [skillMd, setSkillMd] = useState<{ content: string; path: string; exists: boolean } | null>(null)
-  const [settings, setSettings] = useState({ template: "modern", include_photo: false, photo_path: "" })
+  const [settings, setSettings] = useState({ template: "modern", include_photo: false, photo_path: "", group_experience: false })
   const [generating, setGenerating] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const photoRef = useRef<HTMLInputElement>(null)
@@ -159,6 +159,17 @@ export default function ResumePage() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.group_experience}
+                    onChange={e => setSettings(s => ({ ...s, group_experience: e.target.checked }))}
+                  />
+                  Group roles by company
+                </label>
               </div>
 
               <div className="space-y-1.5">
