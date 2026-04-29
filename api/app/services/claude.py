@@ -69,8 +69,7 @@ async def tailor_resume(skill_md: str, jd_text: str) -> dict:
     """Generate a tailored resume JSON from SKILL.md + job description."""
     client = anthropic.Anthropic(api_key=get_api_key())
 
-    prompt = f"""You are an expert resume writer. Using the candidate's background and preferences below, \
-create a tailored resume for the specific job description.
+    prompt = f"""You are an expert resume writer. Tailor the candidate's resume for the job description below.
 
 --- CANDIDATE BACKGROUND & PREFERENCES (SKILL.md) ---
 {skill_md}
@@ -78,15 +77,11 @@ create a tailored resume for the specific job description.
 --- JOB DESCRIPTION ---
 {jd_text}
 
-Instructions:
-- Follow the candidate's preferences exactly (bullet count, tone, formatting style, etc.)
-- Select and emphasize experience most relevant to this JD
-- Use metrics and achievements from the candidate's background where available
+Rules:
+- Follow every preference stated in SKILL.md exactly — tone, bullet count, word choices, what to avoid, everything
 - Do NOT fabricate experience, skills, or companies not mentioned in SKILL.md
-- Reorder skills so the most JD-relevant ones come first
-- Write the summary to directly address this specific role
+- If the candidate held multiple roles at the same company, create a SEPARATE experience entry for each — never combine with "/" or "and"
 - Extract the exact job title from the JD and put it in personal.position
-- If the candidate held multiple roles at the same company, create a SEPARATE experience entry for each role — never combine them into one entry with "/" or "and". Each role gets its own title, dates, and bullets.
 
 Return ONLY valid JSON matching this schema, no explanation:
 {RESUME_JSON_SCHEMA}"""
