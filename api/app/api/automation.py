@@ -45,24 +45,31 @@ async def setup_session():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+SESSION_LIFETIME_HOURS = 3  # LinkedIn sessions last ~2-3 hours in practice
+
 @router.get("/session-status")
 async def session_status():
-    import json
     import time
     cookie_file = Path.home() / ".apply4me" / "linkedin_cookies.json"
     if not cookie_file.exists():
-        return {"has_session": False, "expired": False}
+        return {"has_session": False, "expired": False, "expires_at": None}
     try:
         cookies = json.loads(cookie_file.read_text())
         li_at = next((c for c in cookies if c.get("name") == "li_at"), None)
         if not li_at:
-            return {"has_session": False, "expired": False}
-        expires = li_at.get("expires", -1)
-        if expires != -1 and expires < time.time():
-            return {"has_session": False, "expired": True}
-        return {"has_session": True, "expired": False}
+            return {"has_session": False, "expired": False, "expires_at": None}
+
+        # Use cookie file mtime as "authenticated_at" — this is when the user last logged in.
+        # LinkedIn's cookie.expires is ~1 year (nominal) but the session is invalidated
+        # server-side after a few hours, so we use our own estimated expiry.
+        authenticated_at = cookie_file.stat().st_mtime
+        expires_at = authenticated_at + SESSION_LIFETIME_HOURS * 3600
+
+        if expires_at < time.time():
+            return {"has_session": False, "expired": True, "expires_at": expires_at}
+        return {"has_session": True, "expired": False, "expires_at": expires_at}
     except Exception:
-        return {"has_session": False, "expired": False}
+        return {"has_session": False, "expired": False, "expires_at": None}
 
 
 @router.post("/scrape")

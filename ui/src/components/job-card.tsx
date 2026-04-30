@@ -3,11 +3,11 @@
 import { useState } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
-import { Check, X, ExternalLink, MapPin, Building2 } from "lucide-react"
+import { Check, X, ExternalLink, MapPin, Building2, RotateCcw } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { cn, STATUS_COLORS, ATS_COLORS, formatDate } from "@/lib/utils"
+import { cn, STATUS_COLORS, ATS_COLORS, ATS_LABELS, formatDate } from "@/lib/utils"
 import { api, type Job } from "@/lib/api"
 
 interface JobCardProps {
@@ -16,7 +16,7 @@ interface JobCardProps {
 }
 
 export function JobCard({ job, onUpdate }: JobCardProps) {
-  const [loading, setLoading] = useState<"approve" | "skip" | null>(null)
+  const [loading, setLoading] = useState<"approve" | "skip" | "reconsider" | null>(null)
 
   async function handleApprove() {
     setLoading("approve")
@@ -44,6 +44,22 @@ export function JobCard({ job, onUpdate }: JobCardProps) {
     }
   }
 
+  async function handleReconsider() {
+    setLoading("reconsider")
+    try {
+      const updated = await api.jobs.approve(job.id)
+      onUpdate(updated)
+      toast.success("Job moved to approved")
+    } catch {
+      toast.error("Failed to reconsider job")
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  const atsLabel = ATS_LABELS[job.ats_type] ?? job.ats_type
+  const atsColor = ATS_COLORS[job.ats_type] ?? ATS_COLORS.unknown
+
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardContent className="p-4">
@@ -59,11 +75,9 @@ export function JobCard({ job, onUpdate }: JobCardProps) {
               <Badge className={cn("text-xs border", STATUS_COLORS[job.status])}>
                 {job.status}
               </Badge>
-              {job.ats_type !== "unknown" && (
-                <Badge className={cn("text-xs border", ATS_COLORS[job.ats_type])}>
-                  {job.ats_type}
-                </Badge>
-              )}
+              <Badge className={cn("text-xs border", atsColor)}>
+                {atsLabel}
+              </Badge>
             </div>
             <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
@@ -117,11 +131,35 @@ export function JobCard({ job, onUpdate }: JobCardProps) {
               </>
             )}
             {job.status === "approved" && (
-              <Link href={`/jobs/${job.id}`}>
-                <Button size="sm" className="h-8">
-                  View & Apply
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 border-red-200 text-red-600 hover:bg-red-50"
+                  onClick={handleSkip}
+                  disabled={loading !== null}
+                >
+                  <X className="h-3.5 w-3.5 mr-1" />
+                  Skip
                 </Button>
-              </Link>
+                <Link href={`/jobs/${job.id}`}>
+                  <Button size="sm" className="h-8">
+                    View & Apply
+                  </Button>
+                </Link>
+              </>
+            )}
+            {job.status === "skipped" && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={handleReconsider}
+                disabled={loading !== null}
+              >
+                <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                Reconsider
+              </Button>
             )}
           </div>
         </div>

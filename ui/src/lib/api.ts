@@ -1,7 +1,7 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
 export type JobStatus = "new" | "approved" | "skipped" | "applied" | "rejected"
-export type ATSType = "greenhouse" | "lever" | "ashby" | "workday" | "easy_apply" | "unknown"
+export type ATSType = "greenhouse" | "lever" | "ashby" | "workday" | "icims" | "taleo" | "smartrecruiters" | "jobvite" | "brassring" | "successfactors" | "easy_apply" | "external" | "unknown"
 
 export interface Job {
   id: number
@@ -108,7 +108,7 @@ export const api = {
     templates: () => request<{ templates: string[] }>("/api/resume/templates"),
   },
   automation: {
-    sessionStatus: () => request<{ has_session: boolean }>("/api/automation/session-status"),
+    sessionStatus: () => request<{ has_session: boolean; expired: boolean; expires_at: number | null }>("/api/automation/session-status"),
     setupSession: () => request<{ status: string; message: string }>("/api/automation/setup-session", { method: "POST" }),
     scrapeStatus: () => request<{ running: boolean; pid?: number }>("/api/automation/scrape-status"),
     scrape: (config: {

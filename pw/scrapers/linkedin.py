@@ -111,7 +111,11 @@ async def extract_job_cards(page: Page) -> list[dict]:
             );
             const location = locEl?.innerText.trim() || '';
 
-            results.push({ title, company, location, url: href });
+            // Easy Apply badge — LinkedIn shows this text directly on the card
+            const cardText = (card.innerText || '').toLowerCase();
+            const is_easy_apply = cardText.includes('easy apply');
+
+            results.push({ title, company, location, url: href, is_easy_apply });
         }
 
         return results;
@@ -119,11 +123,20 @@ async def extract_job_cards(page: Page) -> list[dict]:
     return cards
 
 
-async def extract_job_detail(page: Page, job_url: str) -> dict:
+async def extract_job_detail(page: Page, job_url: str, is_easy_apply: bool = False) -> dict:
     """Open job page and extract JD text + external apply URL + applicant count."""
     try:
         await page.goto(job_url, wait_until="domcontentloaded", timeout=30_000)
-        await page.wait_for_timeout(2000)
+        # Wait for the apply button area to load (up to 7s)
+        try:
+            await page.wait_for_selector(
+                "button:has-text('Easy Apply'), "
+                "a[aria-label='Apply on company website'], "
+                "a[href*='/safety/go']",
+                timeout=7000,
+            )
+        except Exception:
+            await page.wait_for_timeout(3000)  # fallback wait
 
         # JD text
         jd_el = page.locator(
@@ -132,46 +145,90 @@ async def extract_job_detail(page: Page, job_url: str) -> dict:
         )
         jd_text = await jd_el.first.inner_text() if await jd_el.count() > 0 else ""
 
-        # External ATS apply URL — only match known ATS domains, never LinkedIn-internal links
-        apply_btn = page.locator(
-            "a[href*='greenhouse.io'], a[href*='lever.co'], "
-            "a[href*='ashbyhq.com'], a[href*='workday.com'], "
-            "a[href*='icims.com'], a[href*='taleo.net'], "
-            "a[href*='smartrecruiters.com'], a[href*='jobvite.com'], "
-            "a.apply-button[href*='http']"
-        )
+        ATS_PATTERNS = [
+            ("greenhouse.io", "greenhouse"),
+            ("lever.co", "lever"),
+            ("ashbyhq.com", "ashby"),
+            ("workday.com", "workday"),
+            ("myworkdayjobs.com", "workday"),
+            ("icims.com", "icims"),
+            ("taleo.net", "taleo"),
+            ("smartrecruiters.com", "smartrecruiters"),
+            ("jobvite.com", "jobvite"),
+            ("brassring.com", "brassring"),
+            ("successfactors.com", "successfactors"),
+        ]
+
         ats_url = ""
         ats_type = "unknown"
 
-        if await apply_btn.count() > 0:
-            ats_url = await apply_btn.first.get_attribute("href") or ""
-            for keyword, name in [
-                ("greenhouse", "greenhouse"), ("lever.co", "lever"),
-                ("ashby", "ashby"), ("workday", "workday"),
-                ("icims", "icims"), ("taleo", "taleo"),
-            ]:
+        # LinkedIn wraps ALL external apply URLs in:
+        #   https://www.linkedin.com/safety/go/?url=<URL-encoded-ats-url>&...
+        # The dots are encoded (%2E), so searching raw HTML for "greenhouse.io"
+        # won't work — we must decode the safety-redirect URL parameter first.
+        found_ats_url: str = await page.evaluate(
+            """(patterns) => {
+                // 1. Find the external apply anchor — LinkedIn marks it with this aria-label
+                //    OR by the safety/go redirect URL pattern
+                const applyLinks = Array.from(document.querySelectorAll(
+                    'a[aria-label="Apply on company website"], a[href*="/safety/go"]'
+                ));
+
+                for (const link of applyLinks) {
+                    try {
+                        const urlObj = new URL(link.href);
+                        const inner = urlObj.searchParams.get('url');
+                        if (inner) {
+                            const decoded = decodeURIComponent(inner);
+                            // Return regardless — caller will classify or mark as external
+                            return decoded;
+                        }
+                    } catch {}
+                    // safety/go link but no ?url param — return href as-is
+                    if (link.href && !link.href.includes('linkedin.com/jobs')) {
+                        return link.href;
+                    }
+                }
+
+                // 2. Fallback: direct ATS href on an anchor (rare but possible)
+                for (const a of document.querySelectorAll('a[href]')) {
+                    for (const p of patterns) {
+                        if (a.href.includes(p)) return a.href;
+                    }
+                }
+
+                return '';
+            }""",
+            [p[0] for p in ATS_PATTERNS]
+        )
+
+        if found_ats_url:
+            ats_url = found_ats_url
+            for keyword, name in ATS_PATTERNS:
                 if keyword in ats_url:
                     ats_type = name
                     break
+            # If URL found but no known ATS pattern matched, mark as external
+            if ats_type == "unknown" and ats_url.startswith("http"):
+                ats_type = "external"
 
         # If no external ATS found, check for LinkedIn Easy Apply
         if ats_type == "unknown":
-            easy_apply = page.locator(
-                "button:has-text('Easy Apply'), "
-                "button.jobs-apply-button:has-text('Apply'), "
-                "[data-job-id] button:has-text('Apply')"
-            )
-            # Also check page text as fallback — more resilient to DOM changes
-            has_easy_apply_text = await page.evaluate("""() => {
-                const btns = document.querySelectorAll('button');
-                for (const b of btns) {
-                    if (b.innerText && b.innerText.trim().toLowerCase().includes('easy apply')) return true;
-                }
-                return false;
-            }""")
-            if await easy_apply.count() > 0 or has_easy_apply_text:
-                ats_url = job_url  # apply on LinkedIn itself
+            # Fast path: card already told us this is Easy Apply
+            if is_easy_apply:
+                ats_url = job_url
                 ats_type = "easy_apply"
+            else:
+                has_easy_apply = await page.evaluate("""() => {
+                    const btns = document.querySelectorAll('button');
+                    for (const b of btns) {
+                        if (b.innerText && b.innerText.trim().toLowerCase().includes('easy apply')) return true;
+                    }
+                    return false;
+                }""")
+                if has_easy_apply:
+                    ats_url = job_url
+                    ats_type = "easy_apply"
 
         # Closed check — skip jobs no longer accepting applications
         closed = await page.evaluate("""() => {
@@ -324,13 +381,15 @@ async def scrape(config: dict):
 
         enriched = []
         for i, card in enumerate(cards[:50]):
-            print(f"  [{i+1}/{len(cards)}] {card['title']} @ {card['company']}")
-            detail = await extract_job_detail(page, card["url"])
+            ea_flag = " [Easy Apply card]" if card.get("is_easy_apply") else ""
+            print(f"  [{i+1}/{len(cards)}] {card['title']} @ {card['company']}{ea_flag}")
+            detail = await extract_job_detail(page, card["url"], is_easy_apply=card.get("is_easy_apply", False))
 
             if detail.get("closed"):
                 print(f"    Skipping — no longer accepting applications")
                 continue
 
+            print(f"    ATS: {detail.get('ats_type', 'unknown')}")
             # Filter by applicant count if set
             count = detail.get("applicant_count")
             print(f"    Applicants: {count if count is not None else 'unknown'}")

@@ -132,7 +132,7 @@ export default function SettingsPage() {
       // Poll for session status
       setTimeout(async () => {
         const status = await api.automation.sessionStatus()
-        setSessionStatus(status.has_session)
+        setSessionStatus(status)
         setSetupLoading(false)
       }, 30_000)
     } catch {
