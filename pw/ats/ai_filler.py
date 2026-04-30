@@ -159,7 +159,7 @@ class AIFillerAdapter(BaseATSAdapter):
             if not await apply_btn.is_visible(timeout=3000):
                 return False
             print("  LinkedIn job page — clicking Apply to open external form...")
-            async with self.page.context.expect_page() as new_page_info:
+            async with self.page.context.expect_page(timeout=5000) as new_page_info:
                 await apply_btn.click()
             new_page = await new_page_info.value
             await new_page.wait_for_load_state("networkidle", timeout=30_000)
@@ -177,10 +177,22 @@ class AIFillerAdapter(BaseATSAdapter):
         await self.page.wait_for_timeout(2000)
 
         # If this is a LinkedIn job page, click Apply to get to the actual ATS form
-        try:
-            await self._click_linkedin_apply()
-        except Exception as e:
-            print(f"  LinkedIn apply click failed: {e} — continuing on current page")
+        if "linkedin.com/jobs/view/" in self.page.url:
+            switched = False
+            try:
+                switched = await self._click_linkedin_apply()
+            except Exception as e:
+                print(f"  LinkedIn apply click failed: {e} — continuing on current page")
+
+            if not switched:
+                # No new tab opened — check if an Easy Apply modal appeared instead
+                await self.page.wait_for_timeout(1000)
+                dialog = self.page.locator("div[role='dialog']")
+                if await dialog.count() > 0:
+                    print("  Easy Apply modal detected — handing off to Easy Apply adapter.")
+                    from pw.ats.easy_apply import LinkedInEasyApplyAdapter
+                    ea = LinkedInEasyApplyAdapter(self.page, self.resume, self.pdf_path)
+                    return await ea._fill_modal()
 
         for step in range(20):
             print(f"\n--- AI Filler: step {step + 1} | url: {self.page.url} ---")
@@ -252,7 +264,9 @@ class AIFillerAdapter(BaseATSAdapter):
                 next_btn = self.page.locator(
                     "button:has-text('Next'), button:has-text('Continue'), "
                     "button:has-text('next'), button:has-text('continue'), "
-                    "button:has-text('Save and continue')"
+                    "button:has-text('Save and continue'), "
+                    "button:has-text('Review'), button[aria-label*='Review'], "
+                    "button[data-live-test-easy-apply-review-button]"
                 ).first
                 if await next_btn.is_visible(timeout=2000):
                     await next_btn.click()
@@ -364,7 +378,8 @@ Return ONLY a JSON array, no explanation:
             name = field.get("name", "")
             label = field.get("label", "")
 
-            sel = f"#{fid}" if fid else (f"[name='{name}']" if name else None)
+            # Use attribute selector — CSS `#id` breaks on IDs containing `:` or `.`
+            sel = f'[id="{fid}"]' if fid else (f"[name='{name}']" if name else None)
             if not sel:
                 print(f"  Skipping field idx={idx} ({label!r}) — no selector")
                 continue

@@ -125,14 +125,7 @@
   .edu-year { font-size: 8pt; color: #9ca3af; white-space: nowrap; flex-shrink: 0; }
 
   /* ── Skills ── */
-  .skills-grid { display: flex; flex-wrap: wrap; gap: 4px; }
-  .skill-tag {
-    background: #eff6ff;
-    color: #1d4ed8;
-    padding: 1.5px 7px;
-    border-radius: 10px;
-    font-size: 8pt;
-  }
+  .skills { font-size: 9pt; }
 
   /* ── Certs ── */
   .cert-item { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 3px; font-size: 8.5pt; }
@@ -261,11 +254,7 @@
   {% if resume.skills %}
   <div class="section">
     <div class="section-title">Skills</div>
-    <div class="skills-grid">
-      {% for skill in resume.skills %}
-      <span class="skill-tag">{{ skill }}</span>
-      {% endfor %}
-    </div>
+    <div class="skills">{{ resume.skills | join(' · ') }}</div>
   </div>
   {% endif %}
 

@@ -156,8 +156,20 @@ async def extract_job_detail(page: Page, job_url: str) -> dict:
 
         # If no external ATS found, check for LinkedIn Easy Apply
         if ats_type == "unknown":
-            easy_apply = page.locator("button:has-text('Easy Apply')")
-            if await easy_apply.count() > 0:
+            easy_apply = page.locator(
+                "button:has-text('Easy Apply'), "
+                "button.jobs-apply-button:has-text('Apply'), "
+                "[data-job-id] button:has-text('Apply')"
+            )
+            # Also check page text as fallback — more resilient to DOM changes
+            has_easy_apply_text = await page.evaluate("""() => {
+                const btns = document.querySelectorAll('button');
+                for (const b of btns) {
+                    if (b.innerText && b.innerText.trim().toLowerCase().includes('easy apply')) return true;
+                }
+                return false;
+            }""")
+            if await easy_apply.count() > 0 or has_easy_apply_text:
                 ats_url = job_url  # apply on LinkedIn itself
                 ats_type = "easy_apply"
 

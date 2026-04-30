@@ -96,8 +96,9 @@ Specific suggestions:
   won't invent it.
   - Don't include soft skills — "attention to detail", "team player" etc. Claude will weave those into bullets naturally if needed. A
   standalone skills list of soft skills wastes space.
+  - Put down notes in () after skills and a number of years of experience. The last 2 notes for Claude will scan this data for the resume and auto apply. 
 -->
-**Languages:** Python, TypeScript, some Go, SQL
+**Languages:** Python (can read), TypeScript - 5, some Go, SQL (no complex queries) - 5
 **Frameworks:** FastAPI, Next.js, React, Express
 **Infrastructure:** AWS (ECS, RDS, S3, Lambda), Docker, Kubernetes, Terraform
 **Tools:** PostgreSQL, Redis, Kafka, GitHub Actions, Datadog, PagerDuty
@@ -127,3 +128,7 @@ Specific suggestions:
 - I'm strongest in backend and infrastructure; frontend is secondary
 - I'm not interested in roles that are purely management with no hands-on work
 - Target companies: mid-size startups and scale-ups, not FAANG
+- <enter US work authorization here>
+- Target salary: <enter salary range here>. Answer "Yes" to any range that includes or exceeds $140K.
+- In Skills section, if the skill does have no note in (), assume I'm proficient and you can use it in tailoring without hesitation. If there's a note, follow it carefully.
+- The number following the skill is the num of years I have experience (real, not learning) with it, but feel free to use any skill in tailoring as long as you follow the notes in parentheses. if it says "familiar", you can use it but don't highlight it as a strength. if it says "basic", you can only use it if the job description explicitly mentions that level of experience. If there is no number after the skill, you can assume I don't have working experience with the tool, I have only explored it, or learned a bit.

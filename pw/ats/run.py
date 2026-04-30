@@ -6,6 +6,7 @@ Usage:
 """
 import asyncio
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -15,10 +16,17 @@ from playwright.async_api import async_playwright
 from pw.auth.session import load_cookies
 from pw.ats.detector import detect_ats, get_adapter
 
+
+def _kill_stale_playwright_browsers():
+    """Kill any Playwright Chromium processes left over from previous crashed runs."""
+    subprocess.run(["pkill", "-f", "ms-playwright/chromium"], capture_output=True)
+
 BACKEND_URL = "http://localhost:8000"
 
 
 async def apply_to_job(job_id: int):
+    _kill_stale_playwright_browsers()
+
     async with httpx.AsyncClient() as client:
         resp = await client.get(f"{BACKEND_URL}/api/jobs/{job_id}")
         resp.raise_for_status()
