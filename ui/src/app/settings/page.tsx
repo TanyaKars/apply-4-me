@@ -129,12 +129,16 @@ export default function SettingsPage() {
     try {
       const result = await api.automation.setupSession()
       toast.success(result.message ?? "Browser opened")
-      // Poll for session status
-      setTimeout(async () => {
+      const poll = async () => {
         const status = await api.automation.sessionStatus()
         setSessionStatus(status)
-        setSetupLoading(false)
-      }, 30_000)
+        if (status.has_session) {
+          setSetupLoading(false)
+        } else {
+          setTimeout(poll, 3000)
+        }
+      }
+      setTimeout(poll, 3000)
     } catch {
       toast.error("Failed to open browser")
       setSetupLoading(false)

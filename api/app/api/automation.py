@@ -18,6 +18,47 @@ router = APIRouter()
 _scrape_proc: subprocess.Popen | None = None
 
 
+_LOCATIONS = [
+    {"name": "United States",  "geo_id": "103644278"},
+    {"name": "United Kingdom", "geo_id": "101165590"},
+    {"name": "Canada",         "geo_id": "101174742"},
+    {"name": "Australia",      "geo_id": "101452733"},
+    {"name": "Germany",        "geo_id": "101282230"},
+    {"name": "France",         "geo_id": "105015875"},
+    {"name": "Netherlands",    "geo_id": "102890719"},
+    {"name": "Sweden",         "geo_id": "105117694"},
+    {"name": "Denmark",        "geo_id": "104514075"},
+    {"name": "Norway",         "geo_id": "103819153"},
+    {"name": "Finland",        "geo_id": "100456013"},
+    {"name": "Switzerland",    "geo_id": "106693272"},
+    {"name": "Austria",        "geo_id": "103883259"},
+    {"name": "Belgium",        "geo_id": "100565514"},
+    {"name": "Ireland",        "geo_id": "104738515"},
+    {"name": "Portugal",       "geo_id": "100364837"},
+    {"name": "Spain",          "geo_id": "105646813"},
+    {"name": "Italy",          "geo_id": "103350119"},
+    {"name": "Poland",         "geo_id": "105072130"},
+    {"name": "Czech Republic", "geo_id": "104508036"},
+    {"name": "Romania",        "geo_id": "106670623"},
+    {"name": "Ukraine",        "geo_id": "102264497"},
+    {"name": "Israel",         "geo_id": "101620260"},
+    {"name": "India",          "geo_id": "102713980"},
+    {"name": "Singapore",      "geo_id": "102454443"},
+    {"name": "Japan",          "geo_id": "101355337"},
+    {"name": "South Korea",    "geo_id": "105149290"},
+    {"name": "Brazil",         "geo_id": "106057199"},
+    {"name": "Mexico",         "geo_id": "103323778"},
+    {"name": "Argentina",      "geo_id": "100446943"},
+    {"name": "New Zealand",    "geo_id": "105490917"},
+    {"name": "South Africa",   "geo_id": "104035573"},
+]
+
+@router.get("/locations")
+async def get_locations():
+    """Return supported countries with their LinkedIn geoIds."""
+    return _LOCATIONS
+
+
 class ScrapeRequest(BaseModel):
     keywords: list[str] = []
     location: str = "Remote"
@@ -26,6 +67,7 @@ class ScrapeRequest(BaseModel):
     date_posted: str = "past_week"
     work_types: list[str] = []
     max_applicants: int | None = None
+    easy_apply_only: bool = False
 
 
 class ApplyRequest(BaseModel):
@@ -87,6 +129,7 @@ async def trigger_scrape(req: ScrapeRequest):
             "date_posted": req.date_posted,
             "work_types": req.work_types,
             "max_applicants": req.max_applicants,
+            "easy_apply_only": req.easy_apply_only,
         })
         _scrape_proc = subprocess.Popen(
             [sys.executable, "-m", "pw.scrapers.linkedin", "--config", config],

@@ -108,6 +108,7 @@ export const api = {
     templates: () => request<{ templates: string[] }>("/api/resume/templates"),
   },
   automation: {
+    locations: () => request<{ name: string; geo_id: string }[]>("/api/automation/locations"),
     sessionStatus: () => request<{ has_session: boolean; expired: boolean; expires_at: number | null }>("/api/automation/session-status"),
     setupSession: () => request<{ status: string; message: string }>("/api/automation/setup-session", { method: "POST" }),
     scrapeStatus: () => request<{ running: boolean; pid?: number }>("/api/automation/scrape-status"),
@@ -119,6 +120,7 @@ export const api = {
       date_posted?: string
       work_types?: string[]
       max_applicants?: number | null
+      easy_apply_only?: boolean
     }) =>
       request<{ status: string }>("/api/automation/scrape", {
         method: "POST",

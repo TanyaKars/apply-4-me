@@ -188,10 +188,6 @@ export default function HomePage() {
                 : "No session — go to Settings"}
             </span>
           )}
-          <Button variant="outline" size="sm" onClick={loadJobs}>
-            <RefreshCw className="h-4 w-4 mr-1.5" />
-            Refresh
-          </Button>
           {counts.new > 0 && (
             <Button variant="outline" size="sm" onClick={handleClearNew} disabled={clearing}
               className="text-destructive border-destructive/30 hover:bg-destructive/10">

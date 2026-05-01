@@ -1,5 +1,8 @@
 """
-LinkedIn job scraper using saved session cookies.
+LinkedIn job scraper using httpx (no browser — avoids bot detection).
+
+Phase 1: Guest API for job listings — no auth, proper start= pagination
+Phase 2: Guest API per-job endpoint for JD text — no auth, server-rendered HTML
 
 Usage:
   python -m pw.scrapers.linkedin --config '{"keywords":["QA Engineer"],"location":"Remote"}'
@@ -8,273 +11,249 @@ import asyncio
 import json
 import re
 import sys
-from urllib.parse import quote
 
 import httpx
-from playwright.async_api import async_playwright, Page
 
 from pw.auth.session import load_cookies
 
 BACKEND_URL = "http://localhost:8000"
 
-
 WORK_TYPE_MAP = {"remote": "2", "hybrid": "3", "onsite": "1"}
 
-APPLICANT_LIMITS = {
-    "lt10": 10,
-    "lt50": 50,
-    "lt100": 100,
+GEO_ID_MAP: dict[str, str] = {
+    "United States":    "103644278",
+    "United Kingdom":   "101165590",
+    "Canada":           "101174742",
+    "Australia":        "101452733",
+    "Germany":          "101282230",
+    "France":           "105015875",
+    "Netherlands":      "102890719",
+    "Sweden":           "105117694",
+    "Denmark":          "104514075",
+    "Norway":           "103819153",
+    "Finland":          "100456013",
+    "Switzerland":      "106693272",
+    "Austria":          "103883259",
+    "Belgium":          "100565514",
+    "Ireland":          "104738515",
+    "Portugal":         "100364837",
+    "Spain":            "105646813",
+    "Italy":            "103350119",
+    "Poland":           "105072130",
+    "Czech Republic":   "104508036",
+    "Romania":          "106670623",
+    "Ukraine":          "102264497",
+    "Israel":           "101620260",
+    "India":            "102713980",
+    "Singapore":        "102454443",
+    "Japan":            "101355337",
+    "South Korea":      "105149290",
+    "Brazil":           "106057199",
+    "Mexico":           "103323778",
+    "Argentina":        "100446943",
+    "New Zealand":      "105490917",
+    "South Africa":     "104035573",
+}
+
+TIME_FILTER_MAP = {
+    "past_hour":    "r3600",
+    "past_2hours":  "r7200",
+    "past_6hours":  "r21600",
+    "past_12hours": "r43200",
+    "past_day":     "r86400",
+    "past_week":    "r604800",
+    "past_month":   "r2592000",
+}
+
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "accept-language": "en-US,en;q=0.9",
 }
 
 
-def build_linkedin_search_url(
+def _build_cookies(cookies_list: list[dict]) -> dict[str, str]:
+    return {c["name"]: c["value"] for c in cookies_list}
+
+
+def _extract_job_id(url: str) -> str | None:
+    m = re.search(r"/jobs/view/(\d+)", url)
+    return m.group(1) if m else None
+
+
+def parse_guest_listing_html(html: str) -> list[dict]:
+    """Parse job cards from LinkedIn guest search API HTML."""
+    jobs: list[dict] = []
+    seen: set[str] = set()
+
+    # Split on card boundaries using data-entity-urn (reliable anchor)
+    card_pat = re.compile(r'data-entity-urn="urn:li:jobPosting:(\d+)"')
+    title_pat = re.compile(r'class="[^"]*base-search-card__title[^"]*"[^>]*>\s*(.*?)\s*</\w', re.DOTALL)
+    company_pat = re.compile(r'class="[^"]*base-search-card__subtitle[^"]*"[^>]*>.*?<[^/][^>]*>\s*(.*?)\s*</', re.DOTALL)
+    location_pat = re.compile(r'class="[^"]*job-search-card__location[^"]*"[^>]*>\s*(.*?)\s*</', re.DOTALL)
+
+    card_matches = list(card_pat.finditer(html))
+    for i, m in enumerate(card_matches):
+        job_id = m.group(1)
+        job_url = f"https://www.linkedin.com/jobs/view/{job_id}/"
+        if job_url in seen:
+            continue
+        seen.add(job_url)
+
+        start = m.start()
+        end = card_matches[i + 1].start() if i + 1 < len(card_matches) else len(html)
+        card = html[start:end]
+
+        title_m = title_pat.search(card)
+        company_m = company_pat.search(card)
+        location_m = location_pat.search(card)
+
+        def clean(s: str) -> str:
+            return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", s)).strip()
+
+        title = clean(title_m.group(1)) if title_m else ""
+        if not title:
+            continue
+
+        jobs.append({
+            "title": title,
+            "company": clean(company_m.group(1)) if company_m else "",
+            "location": clean(location_m.group(1)) if location_m else "",
+            "url": job_url,
+            "is_easy_apply": "easy apply" in card.lower(),
+        })
+
+    return jobs
+
+
+async def fetch_job_listings(
     keywords: list[str],
     location: str,
     date_posted: str,
-    work_types: list[str] | None = None,
-) -> str:
-    kw = quote(" ".join(keywords))
-    loc = quote(location)
-
-    time_filter_map = {
-        "past_day": "r86400",
-        "past_week": "r604800",
-        "past_month": "r2592000",
+    work_types: list[str],
+    easy_apply_only: bool,
+    max_applicants: int | None,
+    max_pages: int = 10,
+    cookies: dict | None = None,
+) -> list[dict]:
+    """Fetch job listings via LinkedIn guest API with proper pagination."""
+    base_params: dict = {
+        "keywords": " ".join(keywords),
+        "location": location,
+        "f_TPR": TIME_FILTER_MAP.get(date_posted, "r604800"),
+        "sortBy": "R",
     }
-    time_filter = time_filter_map.get(date_posted, "r604800")
-
-    url = (
-        f"https://www.linkedin.com/jobs/search/"
-        f"?keywords={kw}&location={loc}&f_TPR={time_filter}"
-    )
 
     if work_types:
         codes = [WORK_TYPE_MAP[wt] for wt in work_types if wt in WORK_TYPE_MAP]
         if codes:
-            # f_WT takes comma-separated codes — do NOT encode the comma
-            url += f"&f_WT={','.join(codes)}"
+            base_params["f_WT"] = ",".join(codes)
 
-    return url
+    if easy_apply_only:
+        base_params["f_AL"] = "true"
 
+    if max_applicants is not None:
+        base_params["f_EA"] = "true"
 
-async def scroll_to_load_all(page: Page, max_scrolls: int = 10):
-    for _ in range(max_scrolls):
-        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        await page.wait_for_timeout(1500)
-        # "Show more jobs" button (class varies — match loosely)
-        btn = page.locator("button:has-text('Show more jobs')")
-        if await btn.is_visible():
-            await btn.click()
-            await page.wait_for_timeout(2000)
+    all_jobs: list[dict] = []
+    seen_urls: set[str] = set()
 
+    async with httpx.AsyncClient(headers=_HEADERS, cookies=cookies or {}, timeout=30.0, follow_redirects=True) as client:
+        for page_num in range(max_pages):
+            params = {**base_params, "start": page_num * 25}
+            url = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+            print(f"Page {page_num + 1} (start={params['start']})")
 
-async def extract_job_cards(page: Page) -> list[dict]:
-    """Extract job cards via JS — class-name-agnostic, works with current LinkedIn HTML."""
-    cards = await page.evaluate("""() => {
-        const results = [];
-        const seen = new Set();
+            try:
+                resp = await client.get(url, params=params)
+            except Exception as e:
+                print(f"  Request failed: {e}")
+                break
 
-        // All job-detail links are reliable anchors regardless of class name changes
-        const links = document.querySelectorAll('a[href*="/jobs/view/"]');
+            print(f"  HTTP {resp.status_code}, body length: {len(resp.text)}")
+            print(f"  Body preview: {resp.text[:300]!r}")
+            if not resp.is_success or not resp.text.strip():
+                print("  Empty or error response — done")
+                break
 
-        for (const link of links) {
-            const href = link.href.split('?')[0];
-            if (!href || seen.has(href)) continue;
-            seen.add(href);
+            page_jobs = parse_guest_listing_html(resp.text)
+            new_jobs = [j for j in page_jobs if j["url"] not in seen_urls]
+            print(f"  Cards: {len(page_jobs)}, new: {len(new_jobs)}")
 
-            // Title: text of the link or its first strong/span child
-            const title = (
-                link.querySelector('strong, span[aria-hidden="true"]')?.innerText ||
-                link.innerText
-            ).trim();
-            if (!title) continue;
+            if not new_jobs:
+                print("  No new jobs — done")
+                break
 
-            // Walk up to the card container (li or div with job-card in class)
-            let card = link.parentElement;
-            for (let i = 0; i < 6 && card; i++) {
-                const tag = card.tagName;
-                const cls = card.className || '';
-                if (tag === 'LI' || cls.includes('job-card') || cls.includes('jobs-search-results__list-item')) break;
-                card = card.parentElement;
-            }
-            if (!card) card = link.parentElement;
+            for j in new_jobs:
+                seen_urls.add(j["url"])
+            all_jobs.extend(new_jobs)
+            print(f"  Running total: {len(all_jobs)}")
 
-            // Company
-            const companyEl = card.querySelector(
-                'a[href*="/company/"], [class*="company"], [class*="primary-description"], [class*="subtitle"]'
-            );
-            const company = companyEl?.innerText.trim() || '';
+            await asyncio.sleep(1.0)
 
-            // Location
-            const locEl = card.querySelector(
-                '[class*="metadata-item"], [class*="location"], [class*="workplace-type"], li'
-            );
-            const location = locEl?.innerText.trim() || '';
-
-            // Easy Apply badge — LinkedIn shows this text directly on the card
-            const cardText = (card.innerText || '').toLowerCase();
-            const is_easy_apply = cardText.includes('easy apply');
-
-            results.push({ title, company, location, url: href, is_easy_apply });
-        }
-
-        return results;
-    }""")
-    return cards
+    return all_jobs
 
 
-async def extract_job_detail(page: Page, job_url: str, is_easy_apply: bool = False) -> dict:
-    """Open job page and extract JD text + external apply URL + applicant count."""
+def _extract_jd_text(html: str) -> str:
+    """Extract job description text from LinkedIn job page HTML."""
+    # Try specific class names in order of reliability
+    for marker in ("show-more-less-html__markup", "description__text", "job-details"):
+        idx = html.find(marker)
+        if idx == -1:
+            continue
+        # Find the opening > of this element
+        tag_end = html.find(">", idx)
+        if tag_end == -1:
+            continue
+        # Take a generous window — large enough for any JD, strip tags
+        raw = html[tag_end + 1: tag_end + 12000]
+        text = re.sub(r"<[^>]+>", " ", raw)
+        text = re.sub(r"\s+", " ", text).strip()
+        if len(text) > 100:
+            return text
+    return ""
+
+
+async def fetch_job_detail(client: httpx.AsyncClient, job_url: str, is_easy_apply: bool) -> dict:
+    """Fetch JD text from LinkedIn job detail endpoint (authenticated)."""
+    job_id = _extract_job_id(job_url)
+    if not job_id:
+        return {"jd_text": "", "ats_type": "unknown", "ats_url": "", "applicant_count": None}
+
+    detail_url = f"https://www.linkedin.com/jobs/view/{job_id}/"
     try:
-        await page.goto(job_url, wait_until="domcontentloaded", timeout=30_000)
-        # Wait for the apply button area to load (up to 7s)
-        try:
-            await page.wait_for_selector(
-                "button:has-text('Easy Apply'), "
-                "a[aria-label='Apply on company website'], "
-                "a[href*='/safety/go']",
-                timeout=7000,
-            )
-        except Exception:
-            await page.wait_for_timeout(3000)  # fallback wait
+        resp = await client.get(detail_url)
+        if not resp.is_success:
+            return {"jd_text": "", "ats_type": "unknown", "ats_url": "", "applicant_count": None}
 
-        # JD text
-        jd_el = page.locator(
-            "div.description__text, div.jobs-description__content, "
-            "div#job-details, article.jobs-description__container"
-        )
-        jd_text = await jd_el.first.inner_text() if await jd_el.count() > 0 else ""
+        html = resp.text
+        lower = html.lower()
 
-        ATS_PATTERNS = [
-            ("greenhouse.io", "greenhouse"),
-            ("lever.co", "lever"),
-            ("ashbyhq.com", "ashby"),
-            ("workday.com", "workday"),
-            ("myworkdayjobs.com", "workday"),
-            ("icims.com", "icims"),
-            ("taleo.net", "taleo"),
-            ("smartrecruiters.com", "smartrecruiters"),
-            ("jobvite.com", "jobvite"),
-            ("brassring.com", "brassring"),
-            ("successfactors.com", "successfactors"),
-        ]
+        if "no longer accepting" in lower or "not accepting applications" in lower:
+            return {"closed": True, "jd_text": "", "ats_type": "unknown", "ats_url": "", "applicant_count": None}
 
-        ats_url = ""
-        ats_type = "unknown"
+        jd_text = _extract_jd_text(html)
 
-        # LinkedIn wraps ALL external apply URLs in:
-        #   https://www.linkedin.com/safety/go/?url=<URL-encoded-ats-url>&...
-        # The dots are encoded (%2E), so searching raw HTML for "greenhouse.io"
-        # won't work — we must decode the safety-redirect URL parameter first.
-        found_ats_url: str = await page.evaluate(
-            """(patterns) => {
-                // 1. Find the external apply anchor — LinkedIn marks it with this aria-label
-                //    OR by the safety/go redirect URL pattern
-                const applyLinks = Array.from(document.querySelectorAll(
-                    'a[aria-label="Apply on company website"], a[href*="/safety/go"]'
-                ));
-
-                for (const link of applyLinks) {
-                    try {
-                        const urlObj = new URL(link.href);
-                        const inner = urlObj.searchParams.get('url');
-                        if (inner) {
-                            const decoded = decodeURIComponent(inner);
-                            // Return regardless — caller will classify or mark as external
-                            return decoded;
-                        }
-                    } catch {}
-                    // safety/go link but no ?url param — return href as-is
-                    if (link.href && !link.href.includes('linkedin.com/jobs')) {
-                        return link.href;
-                    }
-                }
-
-                // 2. Fallback: direct ATS href on an anchor (rare but possible)
-                for (const a of document.querySelectorAll('a[href]')) {
-                    for (const p of patterns) {
-                        if (a.href.includes(p)) return a.href;
-                    }
-                }
-
-                return '';
-            }""",
-            [p[0] for p in ATS_PATTERNS]
-        )
-
-        if found_ats_url:
-            ats_url = found_ats_url
-            for keyword, name in ATS_PATTERNS:
-                if keyword in ats_url:
-                    ats_type = name
-                    break
-            # If URL found but no known ATS pattern matched, mark as external
-            if ats_type == "unknown" and ats_url.startswith("http"):
-                ats_type = "external"
-
-        # If no external ATS found, check for LinkedIn Easy Apply
-        if ats_type == "unknown":
-            # Fast path: card already told us this is Easy Apply
-            if is_easy_apply:
-                ats_url = job_url
-                ats_type = "easy_apply"
-            else:
-                has_easy_apply = await page.evaluate("""() => {
-                    const btns = document.querySelectorAll('button');
-                    for (const b of btns) {
-                        if (b.innerText && b.innerText.trim().toLowerCase().includes('easy apply')) return true;
-                    }
-                    return false;
-                }""")
-                if has_easy_apply:
-                    ats_url = job_url
-                    ats_type = "easy_apply"
-
-        # Closed check — skip jobs no longer accepting applications
-        closed = await page.evaluate("""() => {
-            const body = document.body.innerText.toLowerCase();
-            return body.includes('no longer accepting applications') ||
-                   body.includes('not accepting applications');
-        }""")
-        if closed:
-            return {"closed": True, "jd_text": "", "ats_url": "", "ats_type": "unknown", "applicant_count": None}
-
-        # Applicant count — text like "42 applicants" / "Over 200 applicants" / "Be among the first 25"
-        # LinkedIn changes class names frequently, so walk all text nodes for "applicant"
         applicant_count: int | None = None
-        try:
-            count_text = await page.evaluate("""() => {
-                // Walk every visible text node looking for "applicant"
-                const walker = document.createTreeWalker(
-                    document.body,
-                    NodeFilter.SHOW_TEXT,
-                    null
-                );
-                let node;
-                while ((node = walker.nextNode())) {
-                    const t = node.textContent.trim();
-                    if (t.toLowerCase().includes('applicant')) {
-                        return t;
-                    }
-                }
-                return '';
-            }""")
-            if count_text:
-                nums = re.findall(r"\d[\d,]*", count_text)
-                if nums:
-                    applicant_count = int(nums[-1].replace(",", ""))
-        except Exception:
-            pass
+        count_m = re.search(r"([\d,]+)\s+applicant", html, re.IGNORECASE)
+        if count_m:
+            applicant_count = int(count_m.group(1).replace(",", ""))
+
+        ats_type = "easy_apply" if is_easy_apply else "unknown"
+        ats_url = job_url if is_easy_apply else ""
 
         return {
-            "jd_text": jd_text.strip(),
-            "ats_url": ats_url,
+            "jd_text": jd_text,
             "ats_type": ats_type,
+            "ats_url": ats_url,
             "applicant_count": applicant_count,
         }
     except Exception as e:
-        print(f"  Error extracting detail from {job_url}: {e}")
-        return {"jd_text": "", "ats_url": "", "ats_type": "unknown", "applicant_count": None}
+        print(f"  Error fetching detail for {job_url}: {e}")
+        return {"jd_text": "", "ats_type": "unknown", "ats_url": "", "applicant_count": None}
 
 
 async def post_jobs_to_backend(jobs: list[dict]):
@@ -295,9 +274,9 @@ async def scrape(config: dict):
     date_posted = config.get("date_posted", "past_week")
     blacklist = set(config.get("blacklist_companies", []))
     work_types = config.get("work_types", [])
-    max_applicants: int | None = config.get("max_applicants")  # None means no limit
+    max_applicants: int | None = config.get("max_applicants")
+    easy_apply_only = config.get("easy_apply_only", False)
 
-    # Build location from city + country (or legacy flat "location" field)
     country = config.get("country", "")
     city = config.get("city", "")
     if city and country:
@@ -307,105 +286,52 @@ async def scrape(config: dict):
     else:
         location = config.get("location", "Remote")
 
-    if date_posted not in ("past_day", "past_week", "past_month"):
-        print(f"  Warning: unknown date_posted value '{date_posted}', defaulting to past_week")
+    if date_posted not in TIME_FILTER_MAP:
+        print(f"  Warning: unknown date_posted '{date_posted}', defaulting to past_week")
+
+    cookies = _build_cookies(load_cookies())
 
     print(f"Scraping LinkedIn for: {keywords} in {location}")
     print(f"  Date posted: {date_posted}")
     print(f"  Work types: {work_types or 'any'}")
     print(f"  Max applicants: {max_applicants if max_applicants is not None else 'any'}")
+    print(f"  Easy Apply only: {easy_apply_only}")
 
-    cookies = load_cookies()
-    search_url = build_linkedin_search_url(keywords, location, date_posted, work_types or None)
+    cards = await fetch_job_listings(
+        keywords, location, date_posted, work_types, easy_apply_only, max_applicants,
+        cookies=cookies,
+    )
+    print(f"Total cards collected: {len(cards)}")
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-                       "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
-        await context.add_cookies(cookies)
+    # Blacklist filter
+    blacklist_lower = {b.lower() for b in blacklist}
+    cards = [c for c in cards if c["company"].lower() not in blacklist_lower]
 
-        page = await context.new_page()
-        print(f"Navigating to: {search_url}")
-        await page.goto(search_url, wait_until="domcontentloaded", timeout=30_000)
-        await page.wait_for_timeout(4000)
+    # Title-level remote filter (catch leakage from LinkedIn's f_WT)
+    if work_types and not any(wt in work_types for wt in ("onsite", "hybrid")):
+        ONSITE_KEYWORDS = {
+            "on-site", "onsite", "on site", "in-person", "in person",
+            "hybrid", "office-based", "office based", "must be local",
+        }
+        before = len(cards)
+        cards = [c for c in cards if not any(kw in c["title"].lower() for kw in ONSITE_KEYWORDS)]
+        print(f"Remote title filter: {before} → {len(cards)} cards")
 
-        await scroll_to_load_all(page)
-
-        cards = await extract_job_cards(page)
-        print(f"Found {len(cards)} job cards")
-
-        blacklist_lower = {b.lower() for b in blacklist}
-        cards = [c for c in cards if c["company"].lower() not in blacklist_lower]
-
-        # Filter cards by location text when a specific country is requested.
-        # LinkedIn's remote filter still surfaces international jobs, so we
-        # post-filter: keep cards whose location is empty/generic OR contains
-        # the target country name.
-        if country:
-            country_variants = [country.lower()]
-            if country.lower() in ("united states", "usa", "us"):
-                country_variants += ["united states", "usa", "u.s."]
-            elif country.lower() in ("united kingdom", "uk"):
-                country_variants += ["united kingdom", "uk", "great britain"]
-
-            # Known countries to exclude (anything that looks like another country)
-            # We use an allowlist: keep only if location is blank/remote OR contains target
-            def _location_ok(loc: str) -> bool:
-                loc = loc.lower().strip()
-                if not loc or loc in ("remote", "worldwide", "anywhere"):
-                    return True
-                return any(v in loc for v in country_variants)
-
-            before = len(cards)
-            cards = [c for c in cards if _location_ok(c.get("location", ""))]
-            print(f"Location filter ({country}): {before} → {len(cards)} cards")
-
-        # Filter by work type keywords in the job title.
-        # LinkedIn's f_WT filter leaks jobs — catch what slips through by
-        # rejecting titles that explicitly mention excluded work types.
-        if work_types and not any(wt in work_types for wt in ("onsite", "hybrid")):
-            # User wants remote only — drop cards that say otherwise in the title
-            ONSITE_KEYWORDS = {
-                "on-site", "onsite", "on site", "in-person", "in person",
-                "hybrid", "office-based", "office based", "must be local",
-            }
-            def _title_is_remote(title: str) -> bool:
-                t = title.lower()
-                return not any(kw in t for kw in ONSITE_KEYWORDS)
-
-            before = len(cards)
-            cards = [c for c in cards if _title_is_remote(c.get("title", ""))]
-            print(f"Work type title filter (remote only): {before} → {len(cards)} cards")
-
-        enriched = []
+    enriched = []
+    async with httpx.AsyncClient(headers=_HEADERS, cookies=cookies, timeout=30.0, follow_redirects=True) as client:
         for i, card in enumerate(cards[:50]):
-            ea_flag = " [Easy Apply card]" if card.get("is_easy_apply") else ""
-            print(f"  [{i+1}/{len(cards)}] {card['title']} @ {card['company']}{ea_flag}")
-            detail = await extract_job_detail(page, card["url"], is_easy_apply=card.get("is_easy_apply", False))
+            ea_flag = " [Easy Apply]" if card.get("is_easy_apply") else ""
+            print(f"  [{i+1}/{min(len(cards), 50)}] {card['title']} @ {card['company']}{ea_flag}")
+
+            detail = await fetch_job_detail(client, card["url"], is_easy_apply=card.get("is_easy_apply", False))
 
             if detail.get("closed"):
-                print(f"    Skipping — no longer accepting applications")
+                print("    Skipping — no longer accepting applications")
                 continue
 
-            print(f"    ATS: {detail.get('ats_type', 'unknown')}")
-            # Filter by applicant count if set
-            count = detail.get("applicant_count")
-            print(f"    Applicants: {count if count is not None else 'unknown'}")
-            if max_applicants is not None:
-                if count is None:
-                    # Could not extract count — skip to be safe when filter is strict
-                    print(f"    Skipping — applicant count unknown, filter is {max_applicants}")
-                    continue
-                if count > max_applicants:
-                    print(f"    Skipping — {count} applicants > limit {max_applicants}")
-                    continue
-
+            print(f"    ATS: {detail.get('ats_type', 'unknown')} | JD: {len(detail.get('jd_text', ''))} chars")
             enriched.append({**card, **detail})
-            await asyncio.sleep(1.5)
-
-        await browser.close()
+            await asyncio.sleep(0.5)
 
     if enriched:
         await post_jobs_to_backend(enriched)
