@@ -128,6 +128,19 @@ export const api = {
       }),
     apply: (jobId: number) =>
       request<{ status: string }>(`/api/automation/apply/${jobId}`, { method: "POST" }),
+    builtin: {
+      sessionStatus: () =>
+        request<{ has_session: boolean }>("/api/automation/builtin/session-status"),
+      setupSession: () =>
+        request<{ status: string; message: string }>("/api/automation/builtin/setup-session", { method: "POST" }),
+      scrape: (config: { keywords: string[]; work_types?: string[] }) =>
+        request<{ status: string }>("/api/automation/builtin/scrape", {
+          method: "POST",
+          body: JSON.stringify(config),
+        }),
+      scrapeStatus: () =>
+        request<{ running: boolean; pid?: number }>("/api/automation/builtin/scrape-status"),
+    },
   },
   health: () => request<{ status: string }>("/api/health"),
 }

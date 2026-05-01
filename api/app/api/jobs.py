@@ -48,9 +48,21 @@ def create_job(job_in: JobCreate, session: Session = Depends(get_session)):
 def bulk_create_jobs(jobs_in: List[JobCreate], session: Session = Depends(get_session)):
     created = []
     for job_in in jobs_in:
+        # Deduplicate by URL
         existing = session.exec(select(Job).where(Job.url == job_in.url)).first()
         if existing:
             created.append(existing)
+            continue
+        # Deduplicate by (company, title) — catches the same job posted on multiple platforms
+        title_norm = job_in.title.strip().lower()
+        company_norm = job_in.company.strip().lower()
+        duplicate = session.exec(
+            select(Job).where(
+                Job.title.ilike(title_norm),
+                Job.company.ilike(company_norm),
+            )
+        ).first()
+        if duplicate:
             continue
         job = Job(**job_in.model_dump())
         session.add(job)

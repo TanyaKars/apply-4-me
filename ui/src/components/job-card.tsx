@@ -7,7 +7,7 @@ import { Check, X, ExternalLink, MapPin, Building2, RotateCcw } from "lucide-rea
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { cn, STATUS_COLORS, ATS_COLORS, ATS_LABELS, formatDate } from "@/lib/utils"
+import { cn, STATUS_COLORS, SOURCE_COLORS, SOURCE_LABELS, getJobSource, formatDate } from "@/lib/utils"
 import { api, type Job } from "@/lib/api"
 
 interface JobCardProps {
@@ -57,8 +57,9 @@ export function JobCard({ job, onUpdate }: JobCardProps) {
     }
   }
 
-  const atsLabel = ATS_LABELS[job.ats_type] ?? job.ats_type
-  const atsColor = ATS_COLORS[job.ats_type] ?? ATS_COLORS.unknown
+  const source = getJobSource(job.url)
+  const sourceLabel = SOURCE_LABELS[source] ?? source
+  const sourceColor = SOURCE_COLORS[source] ?? "bg-gray-50 text-gray-500 border-gray-200"
 
   return (
     <Card className="hover:shadow-md transition-shadow">
@@ -75,8 +76,8 @@ export function JobCard({ job, onUpdate }: JobCardProps) {
               <Badge className={cn("text-xs border", STATUS_COLORS[job.status])}>
                 {job.status}
               </Badge>
-              <Badge className={cn("text-xs border", atsColor)}>
-                {atsLabel}
+              <Badge className={cn("text-xs border", sourceColor)}>
+                {sourceLabel}
               </Badge>
             </div>
             <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">

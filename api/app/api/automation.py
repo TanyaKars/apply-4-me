@@ -14,8 +14,9 @@ APP_ROOT = os.environ.get("APP_ROOT", str(Path(__file__).parents[3]))
 
 router = APIRouter()
 
-# In-process scrape state — tracks the active scrape subprocess
+# In-process scrape state — tracks active scrape subprocesses per platform
 _scrape_proc: subprocess.Popen | None = None
+_builtin_scrape_proc: subprocess.Popen | None = None
 
 
 _LOCATIONS = [
@@ -163,6 +164,68 @@ async def save_config(payload: dict):
     config_file.write_text(json.dumps(existing, indent=2))
     return {"ok": True}
 
+
+# ── Builtin ──────────────────────────────────────────────────────────────────
+
+@router.get("/builtin/session-status")
+async def builtin_session_status():
+    """Check whether Builtin cookies have been saved."""
+    cookie_file = Path.home() / ".apply4me" / "builtin_cookies.json"
+    return {"has_session": cookie_file.exists()}
+
+
+@router.post("/builtin/setup-session")
+async def builtin_setup_session():
+    """Launch browser for Builtin session setup."""
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "pw.auth.builtin_session", "--setup"],
+            cwd=APP_ROOT,
+        )
+        return {
+            "status": "launched",
+            "pid": proc.pid,
+            "message": "Browser opened. Log in to Builtin, then close the browser.",
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/builtin/scrape")
+async def trigger_builtin_scrape(req: ScrapeRequest):
+    """Trigger Builtin job scraper."""
+    global _builtin_scrape_proc
+    if _builtin_scrape_proc is not None and _builtin_scrape_proc.poll() is None:
+        return {"status": "already_running", "pid": _builtin_scrape_proc.pid}
+    try:
+        config = json.dumps({
+            "keywords": req.keywords,
+            "work_types": req.work_types,
+            "blacklist_companies": [],
+        })
+        _builtin_scrape_proc = subprocess.Popen(
+            [sys.executable, "-m", "pw.scrapers.builtin", "--config", config],
+            cwd=APP_ROOT,
+        )
+        return {"status": "started", "pid": _builtin_scrape_proc.pid}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/builtin/scrape-status")
+async def builtin_scrape_status():
+    """Returns whether a Builtin scrape subprocess is currently running."""
+    global _builtin_scrape_proc
+    if _builtin_scrape_proc is None:
+        return {"running": False}
+    code = _builtin_scrape_proc.poll()
+    if code is None:
+        return {"running": True, "pid": _builtin_scrape_proc.pid}
+    _builtin_scrape_proc = None
+    return {"running": False}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 SUPPORTED_ATS = {"greenhouse", "lever", "ashby", "workday", "easy_apply", "unknown"}
 

@@ -35,12 +35,11 @@ function useSessionCountdown(expiresAt: number | null) {
 export default function HomePage() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
-  const [scraping, setScraping] = useState(false)
+  const [scrapingSource, setScrapingSource] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState("all")
   const [search, setSearch] = useState("")
   const [session, setSession] = useState<{ has_session: boolean; expires_at: number | null } | null>(null)
   const [clearing, setClearing] = useState(false)
-  const [scrapeMsg, setScrapeMsg] = useState("")
 
   const countdown = useSessionCountdown(session?.expires_at ?? null)
 
@@ -64,56 +63,64 @@ export default function HomePage() {
       .catch(() => setSession({ has_session: false, expires_at: null }))
   }, [])
 
-  async function handleScrape() {
-    if (!session?.has_session) {
-      toast.error("LinkedIn session expired or missing — go to Settings to re-authenticate.")
-      return
-    }
-    setScraping(true)
-    try {
-      const saved = localStorage.getItem("apply4me_config")
-      const cfg = saved ? JSON.parse(saved) : {}
-      const search = cfg.search ?? {}
-      const keywords = search.keywords?.length ? search.keywords : ["QA Engineer", "SDET"]
-      const country = search.country ?? ""
-      const city = search.city ?? ""
-      const workTypes: string[] = search.work_types ?? []
-      const location = city && country ? `${city}, ${country}` : country || "Remote"
-
-      await api.automation.scrape({
-        keywords,
-        country,
-        city,
-        date_posted: search.date_posted ?? "past_week",
-        work_types: workTypes,
-        max_applicants: search.max_applicants ?? null,
-        easy_apply_only: search.easy_apply_only ?? false,
-      })
-
-      const wtLabel = workTypes.length ? workTypes.join(", ") : "any type"
-      setScrapeMsg(`${keywords.join(", ")} · ${location} · ${wtLabel}`)
-
-      const poll = async () => {
+  function pollUntilDone(statusFn: () => Promise<{ running: boolean }>) {
+    return new Promise<void>(resolve => {
+      const check = async () => {
         try {
-          const status = await api.automation.scrapeStatus()
-          if (status.running) {
-            setTimeout(poll, 5000)
-          } else {
-            await loadJobs()
-            setScraping(false)
-            setScrapeMsg("")
-            toast.success("Scrape finished — job list updated")
-          }
+          const s = await statusFn()
+          s.running ? setTimeout(check, 5000) : resolve()
         } catch {
-          setScraping(false)
-          setScrapeMsg("")
+          resolve()
         }
       }
-      setTimeout(poll, 5000)
-    } catch {
-      toast.error("Failed to start scrape")
-      setScraping(false)
+      setTimeout(check, 5000)
+    })
+  }
+
+  async function handleScrapeAll() {
+    const saved = localStorage.getItem("apply4me_config")
+    const cfg = saved ? JSON.parse(saved) : {}
+    const sources: string[] = cfg.sources ?? ["linkedin"]
+    const s = cfg.search ?? {}
+    const keywords = s.keywords?.length ? s.keywords : ["QA Engineer", "SDET"]
+    const workTypes: string[] = s.work_types ?? []
+
+    if (sources.includes("linkedin")) {
+      if (!session?.has_session) {
+        toast.error("LinkedIn session missing — go to Settings to re-authenticate.")
+      } else {
+        try {
+          setScrapingSource("linkedin")
+          await api.automation.scrape({
+            keywords,
+            country: s.country ?? "",
+            city: s.city ?? "",
+            date_posted: s.date_posted ?? "past_2hours",
+            work_types: workTypes,
+            max_applicants: s.max_applicants ?? null,
+            easy_apply_only: s.easy_apply_only ?? false,
+          })
+          await pollUntilDone(api.automation.scrapeStatus)
+          toast.success("LinkedIn scrape finished")
+        } catch {
+          toast.error("Failed to start LinkedIn scrape")
+        }
+      }
     }
+
+    if (sources.includes("builtin")) {
+      try {
+        setScrapingSource("builtin")
+        await api.automation.builtin.scrape({ keywords, work_types: workTypes })
+        await pollUntilDone(api.automation.builtin.scrapeStatus)
+        toast.success("Builtin scrape finished")
+      } catch {
+        toast.error("Failed to start Builtin scrape")
+      }
+    }
+
+    setScrapingSource(null)
+    await loadJobs()
   }
 
   async function handleClearNew() {
@@ -159,6 +166,11 @@ export default function HomePage() {
     { value: "skipped", label: "Skipped", count: counts.skipped },
   ]
 
+  const isAnyScraping = scrapingSource !== null
+  const scrapeLabel = scrapingSource
+    ? `Scraping ${scrapingSource[0].toUpperCase() + scrapingSource.slice(1)}...`
+    : "Scrape Jobs"
+
   const hasSession = session?.has_session ?? null
   const sessionExpiring = countdown !== null && countdown !== "Expired" &&
     session?.expires_at && (session.expires_at - Date.now() / 1000) < 3600
@@ -196,17 +208,14 @@ export default function HomePage() {
               Clear new ({counts.new})
             </Button>
           )}
-          <Button size="sm" onClick={handleScrape} disabled={scraping}
-            title="Searches LinkedIn for new jobs matching your settings. Already saved jobs won't be duplicated."
+          <Button size="sm" onClick={handleScrapeAll} disabled={isAnyScraping}
+            title="Scrapes all enabled sources from Settings."
           >
-            {scraping
+            {isAnyScraping
               ? <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
               : <Search className="h-4 w-4 mr-1.5" />
             }
-            {scraping
-              ? scrapeMsg ? `Scraping: ${scrapeMsg}` : "Scraping..."
-              : "Scrape Jobs"
-            }
+            {scrapeLabel}
           </Button>
         </div>
       </div>
