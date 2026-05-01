@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { Save, Terminal, Loader2, CheckCircle, XCircle } from "lucide-react"
+import { Save, Terminal, Loader2, CheckCircle, XCircle, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,6 +20,7 @@ interface Config {
     date_posted: string
     work_types: string[]
     max_applicants: number | null
+    easy_apply_only: boolean
     blacklist_companies: string[]
   }
   resume: {
@@ -35,9 +36,10 @@ const DEFAULT_CONFIG: Config = {
     keywords: [],
     country: "United States",
     city: "",
-    date_posted: "past_week",
+    date_posted: "past_2hours",
     work_types: ["remote"],
     max_applicants: null,
+    easy_apply_only: false,
     blacklist_companies: [],
   },
   resume: {
@@ -53,17 +55,53 @@ const WORK_TYPES = [
 ]
 
 const DATE_POSTED_OPTIONS = [
-  { value: "past_day", label: "Past 24h" },
-  { value: "past_week", label: "Past week" },
-  { value: "past_month", label: "Past month" },
+  { value: "past_2hours", label: "Past 2h" },
 ]
 
 const APPLICANT_OPTIONS = [
   { value: null, label: "Any" },
-  { value: 10, label: "< 10" },
-  { value: 50, label: "< 50" },
-  { value: 100, label: "< 100" },
+  { value: 10, label: "Early applicant (< 10)" },
 ]
+
+function CollapsibleSection({
+  title,
+  badge,
+  defaultOpen = false,
+  children,
+}: {
+  title: string
+  badge?: React.ReactNode
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <Card>
+      <button
+        type="button"
+        className="w-full text-left"
+        onClick={() => setOpen(o => !o)}
+      >
+        <CardHeader className="flex flex-row items-center justify-between py-4">
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-base">{title}</CardTitle>
+            {badge}
+          </div>
+          <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+        </CardHeader>
+      </button>
+      {open && <CardContent className="pt-0 space-y-4">{children}</CardContent>}
+    </Card>
+  )
+}
+
+function ComingSoonContent({ name }: { name: string }) {
+  return (
+    <div className="py-6 text-center text-sm text-muted-foreground">
+      {name} scraper coming soon
+    </div>
+  )
+}
 
 export default function SettingsPage() {
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG)
@@ -72,16 +110,20 @@ export default function SettingsPage() {
   const [setupLoading, setSetupLoading] = useState(false)
   const [keywordsInput, setKeywordsInput] = useState("")
   const [blacklistInput, setBlacklistInput] = useState("")
+  const [locations, setLocations] = useState<{ name: string; geo_id: string }[]>([])
 
   useEffect(() => {
     api.automation.sessionStatus()
       .then(d => setSessionStatus(d))
       .catch(() => setSessionStatus({ has_session: false, expired: false }))
 
+    api.automation.locations()
+      .then(setLocations)
+      .catch(() => {})
+
     const saved = localStorage.getItem("apply4me_config")
     if (saved) {
       const c = JSON.parse(saved)
-      // Merge with defaults to handle old saved configs missing new fields
       const merged: Config = {
         ...DEFAULT_CONFIG,
         ...c,
@@ -145,11 +187,25 @@ export default function SettingsPage() {
     }
   }
 
+  const sessionBadge = sessionStatus === null ? null : sessionStatus.has_session ? (
+    <span className="flex items-center gap-1 text-xs text-green-600 font-normal">
+      <CheckCircle className="h-3.5 w-3.5" /> Active
+    </span>
+  ) : sessionStatus.expired ? (
+    <span className="flex items-center gap-1 text-xs text-red-500 font-normal">
+      <XCircle className="h-3.5 w-3.5" /> Expired
+    </span>
+  ) : (
+    <span className="flex items-center gap-1 text-xs text-orange-500 font-normal">
+      <XCircle className="h-3.5 w-3.5" /> No session
+    </span>
+  )
+
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Settings</h1>
 
-      <div className="space-y-6">
+      <div className="space-y-4">
         {/* Resume Source */}
         <Card>
           <CardHeader>
@@ -184,13 +240,10 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* LinkedIn Session */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">LinkedIn Session</CardTitle>
-            <CardDescription>One-time setup to enable job scraping</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        {/* LinkedIn */}
+        <CollapsibleSection title="LinkedIn" badge={sessionBadge}>
+          {/* Session */}
+          <div className="space-y-3 pb-2 border-b">
             <div className="flex items-center gap-3">
               {sessionStatus === null ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -220,127 +273,170 @@ export default function SettingsPage() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              This opens a browser window where you log in to LinkedIn manually.
-              Cookies are saved to ~/.apply4me/linkedin_cookies.json and reused for all scraping.
+              Opens a browser for manual login. Cookies saved to ~/.apply4me/linkedin_cookies.json.
             </p>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* Search Preferences */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Search Preferences</CardTitle>
-            <CardDescription>Default settings for job scraping</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          {/* Limitation note */}
+          <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+            LinkedIn blocks pagination for scrapers, so only the first ~25 results are accessible. The "past 2h" window keeps those 25 slots as fresh as possible.
+          </div>
+
+          {/* Search filters */}
+          <div className="space-y-1.5">
+            <Label>Job Keywords</Label>
+            <Input
+              value={keywordsInput}
+              onChange={e => setKeywordsInput(e.target.value)}
+              placeholder="QA Engineer, SDET, Test Engineer"
+            />
+            <p className="text-xs text-muted-foreground">Comma-separated. Used in LinkedIn search query.</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Job Keywords</Label>
+              <Label>Country</Label>
+              <select
+                value={config.search.country}
+                onChange={e => setConfig(c => ({ ...c, search: { ...c.search, country: e.target.value } }))}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">— select —</option>
+                {locations.map(l => (
+                  <option key={l.geo_id} value={l.name}>{l.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>City <span className="text-muted-foreground">(optional)</span></Label>
               <Input
-                value={keywordsInput}
-                onChange={e => setKeywordsInput(e.target.value)}
-                placeholder="QA Engineer, SDET, Test Engineer"
+                value={config.search.city}
+                onChange={e => setConfig(c => ({ ...c, search: { ...c.search, city: e.target.value } }))}
+                placeholder="San Francisco"
               />
-              <p className="text-xs text-muted-foreground">Comma-separated. Used in LinkedIn search query.</p>
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Country</Label>
-                <Input
-                  value={config.search.country}
-                  onChange={e => setConfig(c => ({ ...c, search: { ...c.search, country: e.target.value } }))}
-                  placeholder="United States"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>City <span className="text-muted-foreground">(optional)</span></Label>
-                <Input
-                  value={config.search.city}
-                  onChange={e => setConfig(c => ({ ...c, search: { ...c.search, city: e.target.value } }))}
-                  placeholder="San Francisco"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Work Type</Label>
-              <div className="flex gap-1.5">
-                {WORK_TYPES.map(wt => {
-                  const active = (config.search.work_types ?? []).includes(wt.value)
-                  return (
-                    <button
-                      key={wt.value}
-                      type="button"
-                      onClick={() => toggleWorkType(wt.value)}
-                      className={cn(
-                        "px-3 py-1.5 text-sm border rounded-md transition-colors",
-                        active
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-background text-foreground border-input hover:bg-accent"
-                      )}
-                    >
-                      {wt.label}
-                    </button>
-                  )
-                })}
-              </div>
-              <p className="text-xs text-muted-foreground">Select one or more. Leave none selected for any type.</p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Date Posted</Label>
-              <div className="flex gap-1.5">
-                {DATE_POSTED_OPTIONS.map(opt => (
+          <div className="space-y-1.5">
+            <Label>Work Type</Label>
+            <div className="flex gap-1.5">
+              {WORK_TYPES.map(wt => {
+                const active = (config.search.work_types ?? []).includes(wt.value)
+                return (
                   <button
-                    key={opt.value}
+                    key={wt.value}
                     type="button"
-                    onClick={() => setConfig(c => ({ ...c, search: { ...c.search, date_posted: opt.value } }))}
+                    onClick={() => toggleWorkType(wt.value)}
                     className={cn(
                       "px-3 py-1.5 text-sm border rounded-md transition-colors",
-                      config.search.date_posted === opt.value
+                      active
                         ? "bg-primary text-primary-foreground border-primary"
                         : "bg-background text-foreground border-input hover:bg-accent"
                     )}
                   >
-                    {opt.label}
+                    {wt.label}
                   </button>
-                ))}
-              </div>
+                )
+              })}
             </div>
+            <p className="text-xs text-muted-foreground">Select one or more. Leave none selected for any type.</p>
+          </div>
 
-            <div className="space-y-1.5">
-              <Label>Max Applicants</Label>
-              <div className="flex gap-1.5">
-                {APPLICANT_OPTIONS.map(opt => (
-                  <button
-                    key={String(opt.value)}
-                    type="button"
-                    onClick={() => setConfig(c => ({ ...c, search: { ...c.search, max_applicants: opt.value } }))}
-                    className={cn(
-                      "px-3 py-1.5 text-sm border rounded-md transition-colors",
-                      config.search.max_applicants === opt.value
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background text-foreground border-input hover:bg-accent"
-                    )}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground">Only show jobs with fewer applicants than selected. "Any" disables the filter.</p>
+          <div className="space-y-1.5">
+            <Label>Date Posted</Label>
+            <div className="flex gap-1.5">
+              {DATE_POSTED_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setConfig(c => ({ ...c, search: { ...c.search, date_posted: opt.value } }))}
+                  className={cn(
+                    "px-3 py-1.5 text-sm border rounded-md transition-colors",
+                    config.search.date_posted === opt.value
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background text-foreground border-input hover:bg-accent"
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
+          </div>
 
-            <div className="space-y-1.5">
-              <Label>Company Blacklist</Label>
-              <Input
-                value={blacklistInput}
-                onChange={e => setBlacklistInput(e.target.value)}
-                placeholder="Company A, Company B"
-              />
-              <p className="text-xs text-muted-foreground">Comma-separated. Jobs from these companies are skipped.</p>
+          <div className="space-y-1.5">
+            <Label>Max Applicants</Label>
+            <div className="flex gap-1.5">
+              {APPLICANT_OPTIONS.map(opt => (
+                <button
+                  key={String(opt.value)}
+                  type="button"
+                  onClick={() => setConfig(c => ({ ...c, search: { ...c.search, max_applicants: opt.value } }))}
+                  className={cn(
+                    "px-3 py-1.5 text-sm border rounded-md transition-colors",
+                    config.search.max_applicants === opt.value
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background text-foreground border-input hover:bg-accent"
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
-          </CardContent>
-        </Card>
+            <p className="text-xs text-muted-foreground">Only show jobs with fewer applicants than selected.</p>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Easy Apply only</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">Only show jobs with LinkedIn Easy Apply</p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={config.search.easy_apply_only}
+              onClick={() => setConfig(c => ({ ...c, search: { ...c.search, easy_apply_only: !c.search.easy_apply_only } }))}
+              className={cn(
+                "relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors",
+                config.search.easy_apply_only ? "bg-primary" : "bg-input"
+              )}
+            >
+              <span className={cn(
+                "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg transition-transform",
+                config.search.easy_apply_only ? "translate-x-5" : "translate-x-0"
+              )} />
+            </button>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Company Blacklist</Label>
+            <Input
+              value={blacklistInput}
+              onChange={e => setBlacklistInput(e.target.value)}
+              placeholder="Company A, Company B"
+            />
+            <p className="text-xs text-muted-foreground">Comma-separated. Jobs from these companies are skipped.</p>
+          </div>
+        </CollapsibleSection>
+
+        {/* Indeed */}
+        <CollapsibleSection title="Indeed">
+          <ComingSoonContent name="Indeed" />
+        </CollapsibleSection>
+
+        {/* Builtin */}
+        <CollapsibleSection title="Builtin">
+          <ComingSoonContent name="Builtin" />
+        </CollapsibleSection>
+
+        {/* Jobright */}
+        <CollapsibleSection title="Jobright">
+          <ComingSoonContent name="Jobright" />
+        </CollapsibleSection>
+
+        {/* Wellfound */}
+        <CollapsibleSection title="Wellfound">
+          <ComingSoonContent name="Wellfound" />
+        </CollapsibleSection>
 
         <Button onClick={handleSave} disabled={saving}>
           {saving ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Save className="h-4 w-4 mr-1.5" />}

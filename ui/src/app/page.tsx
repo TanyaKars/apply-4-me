@@ -87,6 +87,7 @@ export default function HomePage() {
         date_posted: search.date_posted ?? "past_week",
         work_types: workTypes,
         max_applicants: search.max_applicants ?? null,
+        easy_apply_only: search.easy_apply_only ?? false,
       })
 
       const wtLabel = workTypes.length ? workTypes.join(", ") : "any type"
@@ -195,7 +196,9 @@ export default function HomePage() {
               Clear new ({counts.new})
             </Button>
           )}
-          <Button size="sm" onClick={handleScrape} disabled={scraping}>
+          <Button size="sm" onClick={handleScrape} disabled={scraping}
+            title="Searches LinkedIn for new jobs matching your settings. Already saved jobs won't be duplicated."
+          >
             {scraping
               ? <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
               : <Search className="h-4 w-4 mr-1.5" />
