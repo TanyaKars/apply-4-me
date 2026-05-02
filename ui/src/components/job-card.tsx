@@ -44,14 +44,14 @@ export function JobCard({ job, onUpdate }: JobCardProps) {
     }
   }
 
-  async function handleReconsider() {
+  async function handleUnskip() {
     setLoading("reconsider")
     try {
-      const updated = await api.jobs.approve(job.id)
+      const updated = await api.jobs.unskip(job.id)
       onUpdate(updated)
-      toast.success("Job moved to approved")
+      toast.success("Job moved back to new")
     } catch {
-      toast.error("Failed to reconsider job")
+      toast.error("Failed to unskip job")
     } finally {
       setLoading(null)
     }
@@ -151,16 +151,23 @@ export function JobCard({ job, onUpdate }: JobCardProps) {
               </>
             )}
             {job.status === "skipped" && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8"
-                onClick={handleReconsider}
-                disabled={loading !== null}
-              >
-                <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                Reconsider
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  onClick={handleUnskip}
+                  disabled={loading !== null}
+                >
+                  <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                  Unskip
+                </Button>
+                <Link href={`/jobs/${job.id}`}>
+                  <Button size="sm" variant="outline" className="h-8">
+                    View
+                  </Button>
+                </Link>
+              </>
             )}
           </div>
         </div>

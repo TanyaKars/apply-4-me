@@ -88,15 +88,14 @@ export default function HomePage() {
 
   const loadJobs = useCallback(async () => {
     try {
-      const status = statusFilter === "all" ? undefined : statusFilter
-      const data = await api.jobs.list(status)
+      const data = await api.jobs.list()
       setJobs(data)
     } catch {
       toast.error("Failed to load jobs")
     } finally {
       setLoading(false)
     }
-  }, [statusFilter])
+  }, [])
 
   useEffect(() => { loadJobs() }, [loadJobs])
 
@@ -189,13 +188,17 @@ export default function HomePage() {
   }
 
   const filtered = jobs.filter(j => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return (
-      j.title.toLowerCase().includes(q) ||
-      j.company.toLowerCase().includes(q) ||
-      (j.location ?? "").toLowerCase().includes(q)
-    )
+    if (statusFilter === "all" && j.status === "skipped") return false
+    if (statusFilter !== "all" && j.status !== statusFilter) return false
+    if (search) {
+      const q = search.toLowerCase()
+      if (
+        !j.title.toLowerCase().includes(q) &&
+        !j.company.toLowerCase().includes(q) &&
+        !(j.location ?? "").toLowerCase().includes(q)
+      ) return false
+    }
+    return true
   })
 
   const counts = {
