@@ -405,7 +405,7 @@ export default function SettingsPage() {
               onChange={e => setKeywordsInput(e.target.value)}
               placeholder="QA Engineer, SDET, Test Engineer"
             />
-            <p className="text-xs text-muted-foreground">Comma-separated. Used in LinkedIn search query.</p>
+            <p className="text-xs text-muted-foreground">Comma-separated, max 5 positions.</p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

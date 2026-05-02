@@ -329,11 +329,23 @@ async def scrape(config: dict):
     print(f"  Max applicants: {max_applicants if max_applicants is not None else 'any'}")
     print(f"  Easy Apply only: {easy_apply_only}")
 
-    cards = await fetch_job_listings(
-        keywords, location, date_posted, work_types, easy_apply_only, max_applicants,
-        cookies=cookies,
-    )
-    print(f"Total cards collected: {len(cards)}")
+    # Run a separate search per keyword and deduplicate by URL
+    all_cards: list[dict] = []
+    seen_urls: set[str] = set()
+    for kw in keywords[:5]:
+        print(f"\n--- Searching: '{kw}' ---")
+        kw_cards = await fetch_job_listings(
+            [kw], location, date_posted, work_types, easy_apply_only, max_applicants,
+            cookies=cookies,
+        )
+        new = [c for c in kw_cards if c["url"] not in seen_urls]
+        for c in new:
+            seen_urls.add(c["url"])
+        all_cards.extend(new)
+        print(f"  New unique cards from '{kw}': {len(new)}")
+
+    cards = all_cards
+    print(f"\nTotal cards collected: {len(cards)}")
 
     # Blacklist filter
     blacklist_lower = {b.lower() for b in blacklist}

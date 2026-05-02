@@ -63,6 +63,11 @@ def bulk_create_jobs(jobs_in: List[JobCreate], session: Session = Depends(get_se
             )
         ).first()
         if duplicate:
+            new_jd = (job_in.jd_text or "").strip()
+            if new_jd and len(new_jd) > len(duplicate.jd_text or ""):
+                duplicate.jd_text = new_jd
+                session.add(duplicate)
+                session.commit()
             continue
         job = Job(**job_in.model_dump())
         session.add(job)
