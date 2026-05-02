@@ -197,33 +197,65 @@ async def fetch_job_listings(
     return all_jobs
 
 
+def _extract_element_html(html: str, tag_end: int) -> str:
+    """Extract inner HTML by matching the closing tag (avoids bleeding into sibling elements)."""
+    tag_match = re.search(r"<(\w+)[^>]*$", html[: tag_end + 1])
+    tag_name = tag_match.group(1).lower() if tag_match else "div"
+    open_re = re.compile(f"<{tag_name}[\\s>]", re.IGNORECASE)
+    close_re = re.compile(f"</{tag_name}>", re.IGNORECASE)
+    depth, pos = 1, tag_end + 1
+    while pos < len(html) and depth > 0:
+        om = open_re.search(html, pos)
+        cm = close_re.search(html, pos)
+        if not cm:
+            break
+        if om and om.start() < cm.start():
+            depth += 1
+            pos = om.end()
+        else:
+            depth -= 1
+            if depth == 0:
+                return html[tag_end + 1 : cm.start()]
+            pos = cm.end()
+    return html[tag_end + 1 : tag_end + 12000]  # fallback
+
+
+def _html_to_text(raw: str) -> str:
+    raw = re.sub(r"<br\s*/?>", "\n", raw, flags=re.IGNORECASE)
+    raw = re.sub(r"</(p|div|h[1-6]|section|article|tr)>", "\n", raw, flags=re.IGNORECASE)
+    raw = re.sub(r"</li>", "\n", raw, flags=re.IGNORECASE)
+    raw = re.sub(r"<li[^>]*>", "• ", raw, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", "", raw)
+    text = text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+    text = text.replace("&nbsp;", " ").replace("&#39;", "'").replace("&quot;", '"')
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = "\n".join(line.strip() for line in text.splitlines())
+    return text.strip()
+
+
 def _extract_jd_text(html: str) -> str:
     """Extract job description text from LinkedIn job page HTML."""
-    # Try specific class names in order of reliability
     for marker in ("show-more-less-html__markup", "description__text", "job-details"):
         idx = html.find(marker)
         if idx == -1:
             continue
-        # Find the opening > of this element
         tag_end = html.find(">", idx)
         if tag_end == -1:
             continue
-        # Take a generous window — large enough for any JD, strip tags
-        raw = html[tag_end + 1: tag_end + 12000]
-        text = re.sub(r"<[^>]+>", " ", raw)
-        text = re.sub(r"\s+", " ", text).strip()
+        inner = _extract_element_html(html, tag_end)
+        text = _html_to_text(inner)
         if len(text) > 100:
             return text
     return ""
 
 
 async def fetch_job_detail(client: httpx.AsyncClient, job_url: str, is_easy_apply: bool) -> dict:
-    """Fetch JD text from LinkedIn job detail endpoint (authenticated)."""
+    """Fetch JD text from LinkedIn guest job posting API (server-rendered HTML, no JS needed)."""
     job_id = _extract_job_id(job_url)
     if not job_id:
         return {"jd_text": "", "ats_type": "unknown", "ats_url": "", "applicant_count": None}
 
-    detail_url = f"https://www.linkedin.com/jobs/view/{job_id}/"
+    detail_url = f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
     try:
         resp = await client.get(detail_url)
         if not resp.is_success:

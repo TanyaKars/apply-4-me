@@ -231,12 +231,32 @@ class AIFillerAdapter(BaseATSAdapter):
             fields = await self.page.evaluate(_EXTRACT_FIELDS_JS)
             fillable = [f for f in fields if f.get("type") != "file"]
 
-            if fillable:
+            # If no real form fields, or only utility widget fields (email-job/save/share),
+            # look for Apply Now and click it to reach the actual application form.
+            if not fillable or self._looks_like_utility_form(fillable):
+                apply_btn = await self._find_apply_button()
+                if apply_btn:
+                    url_before = self.page.url
+                    print("  Utility/JD page — clicking Apply button to reach application form...")
+                    try:
+                        async with self.page.context.expect_page(timeout=3000) as new_page_info:
+                            await apply_btn.click()
+                        new_page = await new_page_info.value
+                        await new_page.wait_for_load_state("domcontentloaded", timeout=20_000)
+                        self.page = new_page
+                        print(f"  Opened new tab: {self.page.url}")
+                    except Exception:
+                        await self.page.wait_for_timeout(2000)
+                        if self.page.url != url_before:
+                            await self.page.wait_for_load_state("networkidle", timeout=15_000)
+                    continue
+                elif not fillable:
+                    print("  No fillable fields on this step.")
+
+            if fillable and not self._looks_like_utility_form(fillable):
                 print(f"  {len(fillable)} fillable fields — asking Claude...")
                 instructions = await self._ask_claude(fillable)
                 await self._apply_instructions(instructions, fillable)
-            else:
-                print("  No fillable fields on this step.")
 
             await self._upload_resume_if_needed()
 
@@ -275,23 +295,6 @@ class AIFillerAdapter(BaseATSAdapter):
             except Exception:
                 pass
 
-            # If no fields were found, this may be a job description page with an Apply button
-            # Click it (same-page — may scroll to form, reveal it, or navigate)
-            if not fillable:
-                try:
-                    # :text-is() does exact match — avoids "Apply with Indeed" etc.
-                    apply_btn = self.page.locator("button:text-is('Apply'), a:text-is('Apply')").first
-                    if await apply_btn.is_visible(timeout=2000):
-                        url_before = self.page.url
-                        print("  No form fields — clicking Apply button on this page...")
-                        await apply_btn.click()
-                        await self.page.wait_for_timeout(2000)
-                        # If we navigated to a new page, wait for it to load
-                        if self.page.url != url_before:
-                            await self.page.wait_for_load_state("networkidle", timeout=15_000)
-                        continue
-                except Exception as e:
-                    print(f"  Could not click Apply button: {e}")
 
             # Nothing to click — pause and let user decide
             print("  No next/submit button found.")
@@ -301,6 +304,44 @@ class AIFillerAdapter(BaseATSAdapter):
             await self.page.wait_for_timeout(2000)
 
         return False
+
+    def _looks_like_utility_form(self, fields: list[dict]) -> bool:
+        """Return True when visible fields are a widget (email-job/save/share), not the real form."""
+        labels = " ".join(f.get("label", "").lower() for f in fields)
+        # Strong indicators — unambiguous widget labels, check regardless of field count
+        strong = {"recipient", "save job", "save this job", "email this job", "email this position"}
+        if any(kw in labels for kw in strong):
+            return True
+        # Weak indicators — only reliable when form is small
+        if len(fields) > 5:
+            return False
+        weak = {"email this", "share this", "notify me", "job alert"}
+        return any(kw in labels for kw in weak)
+
+    async def _find_apply_button(self):
+        """Find an Apply / Apply Now button on the page, avoiding social/login variants."""
+        import re as _re
+        # Exact matches first (highest confidence), then prefix matches
+        patterns = [
+            _re.compile(r"^apply now$", _re.IGNORECASE),
+            _re.compile(r"^apply$", _re.IGNORECASE),
+            _re.compile(r"^apply for this (job|position|role)$", _re.IGNORECASE),
+            _re.compile(r"^apply to this (job|position|role)$", _re.IGNORECASE),
+        ]
+        for pat in patterns:
+            btn = self.page.get_by_role("button", name=pat).first
+            try:
+                if await btn.is_visible(timeout=500):
+                    return btn
+            except Exception:
+                pass
+            link = self.page.get_by_role("link", name=pat).first
+            try:
+                if await link.is_visible(timeout=500):
+                    return link
+            except Exception:
+                pass
+        return None
 
     async def _ask_claude(self, fields: list[dict]) -> list[dict]:
         """Send form fields to Claude, get back fill instructions."""

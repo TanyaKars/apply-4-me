@@ -2,6 +2,65 @@
 from abc import ABC, abstractmethod
 from playwright.async_api import Page
 
+# JS injected on every page load — dismisses cookie banners and chat overlays
+# via MutationObserver so it catches widgets that appear after initial load.
+_OVERLAY_DISMISSAL_JS = """
+(function() {
+    const ACCEPT_TEXTS = [
+        'accept all', 'accept cookies', 'accept all cookies', 'i accept',
+        'agree', 'agree all', 'allow all', 'allow cookies', 'got it',
+        'ok', 'okay', 'close', 'dismiss', 'consent', 'continue',
+    ];
+    const CLOSE_SELECTORS = [
+        '#onetrust-accept-btn-handler',
+        '.cc-accept', '.cc-dismiss', '.cc-btn',
+        '[class*="cookie"] button[class*="accept"]',
+        '[class*="cookie"] button[class*="agree"]',
+        '[class*="cookie"] button[class*="allow"]',
+        '[id*="cookie-consent"] button',
+        '[class*="cookiebanner"] button',
+        '[class*="cookie-banner"] button',
+        '[class*="cookie-notice"] button',
+        '[data-testid*="cookie"] button',
+        /* chat widgets */
+        '#intercom-container [class*="close"]',
+        '[class*="intercom-"] [aria-label*="close" i]',
+        '[id*="drift"] [class*="close"]',
+        '[class*="drift-widget"] [class*="close"]',
+        '[id*="hubspot-messages"] [class*="close"]',
+        '[class*="live-chat"] button[class*="close"]',
+        '[class*="chat-widget"] button[class*="close"]',
+        /* generic modal close */
+        '[role="dialog"] button[aria-label*="close" i]',
+        '[role="dialog"] button[aria-label*="dismiss" i]',
+    ];
+
+    function tryDismiss() {
+        for (const sel of CLOSE_SELECTORS) {
+            try {
+                const el = document.querySelector(sel);
+                if (el && el.offsetParent !== null) el.click();
+            } catch(e) {}
+        }
+        for (const btn of document.querySelectorAll('button, [role="button"], a[class*="btn"]')) {
+            try {
+                if (btn.offsetParent === null) continue;
+                const text = (btn.innerText || btn.textContent || '').trim().toLowerCase();
+                if (ACCEPT_TEXTS.includes(text)) btn.click();
+            } catch(e) {}
+        }
+    }
+
+    tryDismiss();
+    new MutationObserver(tryDismiss).observe(document.documentElement, {childList: true, subtree: true});
+})();
+"""
+
+
+async def setup_overlay_dismissal(page: Page):
+    """Install auto-dismissal of cookie banners and chat overlays on every page load."""
+    await page.add_init_script(_OVERLAY_DISMISSAL_JS)
+
 
 class BaseATSAdapter(ABC):
     """Base class for ATS form filling adapters."""

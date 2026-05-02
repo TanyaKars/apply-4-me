@@ -15,6 +15,7 @@ from playwright.async_api import async_playwright
 
 from pw.auth.session import load_cookies
 from pw.ats.detector import detect_ats, get_adapter
+from pw.ats.base import setup_overlay_dismissal
 
 
 def _kill_stale_playwright_browsers():
@@ -66,6 +67,7 @@ async def apply_to_job(job_id: int):
         # Add LinkedIn cookies in case needed for auth
         await context.add_cookies(cookies)
         page = await context.new_page()
+        await setup_overlay_dismissal(page)
 
         # For easy_apply, always navigate to the job page itself, not any cached ats_url
         apply_target = job.get("url") if ats_type == "easy_apply" else ats_url
