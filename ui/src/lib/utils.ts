@@ -20,6 +20,31 @@ export const STATUS_COLORS: Record<string, string> = {
   rejected: "bg-red-50 text-red-600 border-red-200",
 }
 
+export const SOURCE_LABELS: Record<string, string> = {
+  linkedin: "LinkedIn",
+  builtin: "Builtin",
+  indeed: "Indeed",
+  jobright: "Jobright",
+  wellfound: "Wellfound",
+}
+
+export const SOURCE_COLORS: Record<string, string> = {
+  linkedin: "bg-blue-50 text-blue-700 border-blue-200",
+  builtin: "bg-violet-50 text-violet-700 border-violet-200",
+  indeed: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  jobright: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  wellfound: "bg-orange-50 text-orange-700 border-orange-200",
+}
+
+export function getJobSource(url: string): string {
+  if (url.includes("linkedin.com")) return "linkedin"
+  if (url.includes("builtin.com")) return "builtin"
+  if (url.includes("indeed.com")) return "indeed"
+  if (url.includes("jobright.ai")) return "jobright"
+  if (url.includes("wellfound.com") || url.includes("angel.co")) return "wellfound"
+  return "unknown"
+}
+
 export const ATS_LABELS: Record<string, string> = {
   greenhouse: "Greenhouse",
   lever: "Lever",

@@ -13,6 +13,7 @@ import { api } from "@/lib/api"
 interface Config {
   skill_md_path: string
   source_resume_path: string
+  sources: string[]
   search: {
     keywords: string[]
     country: string
@@ -32,6 +33,7 @@ interface Config {
 const DEFAULT_CONFIG: Config = {
   skill_md_path: "",
   source_resume_path: "",
+  sources: ["linkedin"],
   search: {
     keywords: [],
     country: "United States",
@@ -47,6 +49,14 @@ const DEFAULT_CONFIG: Config = {
     include_photo: false,
   },
 }
+
+const ALL_SOURCES = [
+  { value: "linkedin", label: "LinkedIn", available: true },
+  { value: "builtin",  label: "Builtin",  available: true },
+  { value: "indeed",   label: "Indeed",   available: false },
+  { value: "jobright", label: "Jobright", available: false },
+  { value: "wellfound",label: "Wellfound",available: false },
+]
 
 const WORK_TYPES = [
   { value: "remote", label: "Remote" },
@@ -103,6 +113,69 @@ function ComingSoonContent({ name }: { name: string }) {
   )
 }
 
+function BuiltinSessionSetup() {
+  const [status, setStatus] = useState<{ has_session: boolean } | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    api.automation.builtin.sessionStatus()
+      .then(setStatus)
+      .catch(() => setStatus({ has_session: false }))
+  }, [])
+
+  async function handleSetup() {
+    setLoading(true)
+    try {
+      const result = await api.automation.builtin.setupSession()
+      toast.success(result.message ?? "Browser opened")
+      const poll = async () => {
+        const s = await api.automation.builtin.sessionStatus()
+        setStatus(s)
+        if (s.has_session) {
+          setLoading(false)
+        } else {
+          setTimeout(poll, 3000)
+        }
+      }
+      setTimeout(poll, 3000)
+    } catch {
+      toast.error("Failed to open browser")
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        {status === null ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : status.has_session ? (
+          <div className="flex items-center gap-2 text-green-600">
+            <CheckCircle className="h-4 w-4" />
+            <span className="text-sm font-medium">Session active</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-orange-500">
+            <XCircle className="h-4 w-4" />
+            <span className="text-sm font-medium">No session</span>
+          </div>
+        )}
+        <Button variant="outline" size="sm" onClick={handleSetup} disabled={loading}>
+          {loading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Terminal className="h-4 w-4 mr-1.5" />}
+          {status?.has_session ? "Re-authenticate" : "Set Up Session"}
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Opens a browser for manual login. Cookies saved to ~/.apply4me/builtin_cookies.json.
+        Login is optional — Builtin job listings are publicly accessible without auth.
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Uses the same keywords and work type filters as the LinkedIn section.
+      </p>
+    </div>
+  )
+}
+
 export default function SettingsPage() {
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG)
   const [saving, setSaving] = useState(false)
@@ -127,6 +200,7 @@ export default function SettingsPage() {
       const merged: Config = {
         ...DEFAULT_CONFIG,
         ...c,
+        sources: c.sources ?? DEFAULT_CONFIG.sources,
         search: { ...DEFAULT_CONFIG.search, ...c.search },
       }
       setConfig(merged)
@@ -236,6 +310,47 @@ export default function SettingsPage() {
               <p className="text-xs text-muted-foreground">
                 Used by "Parse → SKILL.md" on the Resume page.
               </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Sources */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Sources</CardTitle>
+            <CardDescription>Which job boards to scrape when clicking Scrape Jobs</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-1.5 flex-wrap">
+              {ALL_SOURCES.map(src => {
+                const active = (config.sources ?? []).includes(src.value)
+                return (
+                  <button
+                    key={src.value}
+                    type="button"
+                    disabled={!src.available}
+                    onClick={() => {
+                      if (!src.available) return
+                      setConfig(c => {
+                        const current = c.sources ?? []
+                        const next = current.includes(src.value)
+                          ? current.filter(s => s !== src.value)
+                          : [...current, src.value]
+                        return { ...c, sources: next }
+                      })
+                    }}
+                    className={cn(
+                      "px-3 py-1.5 text-sm border rounded-md transition-colors",
+                      !src.available && "opacity-40 cursor-not-allowed",
+                      src.available && active && "bg-primary text-primary-foreground border-primary",
+                      src.available && !active && "bg-background text-foreground border-input hover:bg-accent",
+                    )}
+                  >
+                    {src.label}
+                    {!src.available && <span className="ml-1.5 text-xs opacity-60">soon</span>}
+                  </button>
+                )
+              })}
             </div>
           </CardContent>
         </Card>
@@ -425,7 +540,7 @@ export default function SettingsPage() {
 
         {/* Builtin */}
         <CollapsibleSection title="Builtin">
-          <ComingSoonContent name="Builtin" />
+          <BuiltinSessionSetup />
         </CollapsibleSection>
 
         {/* Jobright */}
