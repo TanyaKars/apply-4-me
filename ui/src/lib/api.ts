@@ -85,6 +85,7 @@ export const api = {
     approve: (id: number) => request<Job>(`/api/jobs/${id}/approve`, { method: "POST" }),
     skip: (id: number) => request<Job>(`/api/jobs/${id}/skip`, { method: "POST" }),
     unskip: (id: number) => request<Job>(`/api/jobs/${id}/unskip`, { method: "POST" }),
+    markApplied: (id: number) => request<Job>(`/api/jobs/${id}/mark-applied`, { method: "POST" }),
     tailor: (id: number) => request<{ job: Job; tailored: ResumeData; skill_md: string }>(
       `/api/jobs/${id}/tailor`, { method: "POST" }
     ),

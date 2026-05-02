@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
@@ -140,6 +141,19 @@ def unskip_job(job_id: int, session: Session = Depends(get_session)):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     job.status = JobStatus.new
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return job
+
+
+@router.post("/{job_id}/mark-applied", response_model=Job)
+def mark_applied(job_id: int, session: Session = Depends(get_session)):
+    job = session.get(Job, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    job.status = JobStatus.applied
+    job.applied_at = datetime.utcnow()
     session.add(job)
     session.commit()
     session.refresh(job)

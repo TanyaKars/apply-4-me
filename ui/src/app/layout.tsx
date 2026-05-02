@@ -3,6 +3,7 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "sonner"
 import { Nav } from "@/components/nav"
+import { ApplyConfirmProvider } from "@/components/apply-confirm-provider"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {children}
           </main>
         </div>
+        <ApplyConfirmProvider />
         <Toaster richColors position="top-right" />
       </body>
     </html>

@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn, STATUS_COLORS, ATS_COLORS } from "@/lib/utils"
 import { api, type Job, type ResumeData } from "@/lib/api"
+import { addPendingApply } from "@/components/apply-confirm-provider"
 
 function TailoredResumeView({ resume }: { resume: ResumeData }) {
   return (
@@ -110,6 +111,8 @@ export default function JobDetailPage() {
   }
 
   async function handleApply() {
+    if (!job) return
+    addPendingApply({ jobId: job.id, title: job.title, company: job.company })
     setApplyLoading(true)
     try {
       await api.automation.apply(Number(id))
