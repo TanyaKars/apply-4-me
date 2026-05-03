@@ -69,6 +69,9 @@ class ScrapeRequest(BaseModel):
     work_types: list[str] = []
     max_applicants: int | None = None
     easy_apply_only: bool = False
+    # Builtin-specific
+    days_since_updated: int | None = None
+    state: str = ""
 
 
 class ApplyRequest(BaseModel):
@@ -201,6 +204,9 @@ async def trigger_builtin_scrape(req: ScrapeRequest):
         config = json.dumps({
             "keywords": req.keywords,
             "work_types": req.work_types,
+            "days_since_updated": req.days_since_updated,
+            "country": req.country,
+            "state": req.state,
             "blacklist_companies": [],
         })
         _builtin_scrape_proc = subprocess.Popen(

@@ -28,6 +28,13 @@ interface Config {
     template: string
     include_photo: boolean
   }
+  builtin: {
+    keywords: string[]
+    work_types: string[]
+    days_since_updated: number | null
+    country: string
+    state: string
+  }
 }
 
 const DEFAULT_CONFIG: Config = {
@@ -47,6 +54,13 @@ const DEFAULT_CONFIG: Config = {
   resume: {
     template: "modern",
     include_photo: false,
+  },
+  builtin: {
+    keywords: [],
+    work_types: [],
+    days_since_updated: 7,
+    country: "United States",
+    state: "",
   },
 }
 
@@ -68,9 +82,63 @@ const DATE_POSTED_OPTIONS = [
   { value: "past_2hours", label: "Past 2h" },
 ]
 
+const BUILTIN_DATE_OPTIONS = [
+  { value: 1,  label: "Past day" },
+  { value: 3,  label: "Past 3 days" },
+  { value: 7,  label: "Past week" },
+  { value: 30, label: "Past month" },
+]
+
 const APPLICANT_OPTIONS = [
   { value: null, label: "Any" },
   { value: 10, label: "Early applicant (< 10)" },
+]
+
+// Builtin uses ISO 3166-1 alpha-3 codes in the country= param
+const BUILTIN_COUNTRIES = [
+  { name: "United States",  code: "USA" },
+  { name: "United Kingdom", code: "GBR" },
+  { name: "Canada",         code: "CAN" },
+  { name: "Australia",      code: "AUS" },
+  { name: "Germany",        code: "DEU" },
+  { name: "France",         code: "FRA" },
+  { name: "Netherlands",    code: "NLD" },
+  { name: "Ireland",        code: "IRL" },
+  { name: "Sweden",         code: "SWE" },
+  { name: "Denmark",        code: "DNK" },
+  { name: "Norway",         code: "NOR" },
+  { name: "Finland",        code: "FIN" },
+  { name: "Switzerland",    code: "CHE" },
+  { name: "Austria",        code: "AUT" },
+  { name: "Belgium",        code: "BEL" },
+  { name: "Portugal",       code: "PRT" },
+  { name: "Spain",          code: "ESP" },
+  { name: "Italy",          code: "ITA" },
+  { name: "Poland",         code: "POL" },
+  { name: "Czech Republic", code: "CZE" },
+  { name: "Romania",        code: "ROU" },
+  { name: "Ukraine",        code: "UKR" },
+  { name: "Israel",         code: "ISR" },
+  { name: "India",          code: "IND" },
+  { name: "Singapore",      code: "SGP" },
+  { name: "Japan",          code: "JPN" },
+  { name: "South Korea",    code: "KOR" },
+  { name: "Brazil",         code: "BRA" },
+  { name: "Mexico",         code: "MEX" },
+  { name: "Argentina",      code: "ARG" },
+  { name: "New Zealand",    code: "NZL" },
+  { name: "South Africa",   code: "ZAF" },
+]
+
+const US_STATES = [
+  "Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut",
+  "Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa",
+  "Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan",
+  "Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada",
+  "New Hampshire","New Jersey","New Mexico","New York","North Carolina",
+  "North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island",
+  "South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont",
+  "Virginia","Washington","West Virginia","Wisconsin","Wyoming",
 ]
 
 function CollapsibleSection({
@@ -113,82 +181,33 @@ function ComingSoonContent({ name }: { name: string }) {
   )
 }
 
-function BuiltinSessionSetup() {
-  const [status, setStatus] = useState<{ has_session: boolean } | null>(null)
-  const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    api.automation.builtin.sessionStatus()
-      .then(setStatus)
-      .catch(() => setStatus({ has_session: false }))
-  }, [])
-
-  async function handleSetup() {
-    setLoading(true)
-    try {
-      const result = await api.automation.builtin.setupSession()
-      toast.success(result.message ?? "Browser opened")
-      const poll = async () => {
-        const s = await api.automation.builtin.sessionStatus()
-        setStatus(s)
-        if (s.has_session) {
-          setLoading(false)
-        } else {
-          setTimeout(poll, 3000)
-        }
-      }
-      setTimeout(poll, 3000)
-    } catch {
-      toast.error("Failed to open browser")
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        {status === null ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : status.has_session ? (
-          <div className="flex items-center gap-2 text-green-600">
-            <CheckCircle className="h-4 w-4" />
-            <span className="text-sm font-medium">Session active</span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-orange-500">
-            <XCircle className="h-4 w-4" />
-            <span className="text-sm font-medium">No session</span>
-          </div>
-        )}
-        <Button variant="outline" size="sm" onClick={handleSetup} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Terminal className="h-4 w-4 mr-1.5" />}
-          {status?.has_session ? "Re-authenticate" : "Set Up Session"}
-        </Button>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Opens a browser for manual login. Cookies saved to ~/.apply4me/builtin_cookies.json.
-        Login is optional — Builtin job listings are publicly accessible without auth.
-      </p>
-      <p className="text-xs text-muted-foreground">
-        Uses the same keywords and work type filters as the LinkedIn section.
-      </p>
-    </div>
-  )
-}
-
 export default function SettingsPage() {
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG)
   const [saving, setSaving] = useState(false)
+
+  // LinkedIn session
   const [sessionStatus, setSessionStatus] = useState<{ has_session: boolean; expired: boolean } | null>(null)
   const [setupLoading, setSetupLoading] = useState(false)
+
+  // Builtin session
+  const [builtinSessionStatus, setBuiltinSessionStatus] = useState<{ has_session: boolean } | null>(null)
+  const [builtinSetupLoading, setBuiltinSetupLoading] = useState(false)
+
+  // Text inputs (controlled separately to avoid split-on-comma on every keystroke)
   const [keywordsInput, setKeywordsInput] = useState("")
   const [blacklistInput, setBlacklistInput] = useState("")
+  const [builtinKeywordsInput, setBuiltinKeywordsInput] = useState("")
+
   const [locations, setLocations] = useState<{ name: string; geo_id: string }[]>([])
 
   useEffect(() => {
     api.automation.sessionStatus()
       .then(d => setSessionStatus(d))
       .catch(() => setSessionStatus({ has_session: false, expired: false }))
+
+    api.automation.builtin.sessionStatus()
+      .then(d => setBuiltinSessionStatus(d))
+      .catch(() => setBuiltinSessionStatus({ has_session: false }))
 
     api.automation.locations()
       .then(setLocations)
@@ -202,10 +221,12 @@ export default function SettingsPage() {
         ...c,
         sources: c.sources ?? DEFAULT_CONFIG.sources,
         search: { ...DEFAULT_CONFIG.search, ...c.search },
+        builtin: { ...DEFAULT_CONFIG.builtin, ...c.builtin },
       }
       setConfig(merged)
       setKeywordsInput((merged.search?.keywords ?? []).join(", "))
       setBlacklistInput((merged.search?.blacklist_companies ?? []).join(", "))
+      setBuiltinKeywordsInput((merged.builtin?.keywords ?? []).join(", "))
     }
   }, [])
 
@@ -217,6 +238,14 @@ export default function SettingsPage() {
     })
   }
 
+  function toggleBuiltinWorkType(wt: string) {
+    setConfig(c => {
+      const current = c.builtin.work_types ?? []
+      const next = current.includes(wt) ? current.filter(x => x !== wt) : [...current, wt]
+      return { ...c, builtin: { ...c.builtin, work_types: next } }
+    })
+  }
+
   async function handleSave() {
     setSaving(true)
     const updated: Config = {
@@ -225,6 +254,10 @@ export default function SettingsPage() {
         ...config.search,
         keywords: keywordsInput.split(",").map(s => s.trim()).filter(Boolean),
         blacklist_companies: blacklistInput.split(",").map(s => s.trim()).filter(Boolean),
+      },
+      builtin: {
+        ...config.builtin,
+        keywords: builtinKeywordsInput.split(",").map(s => s.trim()).filter(Boolean),
       },
     }
     setConfig(updated)
@@ -248,16 +281,31 @@ export default function SettingsPage() {
       const poll = async () => {
         const status = await api.automation.sessionStatus()
         setSessionStatus(status)
-        if (status.has_session) {
-          setSetupLoading(false)
-        } else {
-          setTimeout(poll, 3000)
-        }
+        if (status.has_session) setSetupLoading(false)
+        else setTimeout(poll, 3000)
       }
       setTimeout(poll, 3000)
     } catch {
       toast.error("Failed to open browser")
       setSetupLoading(false)
+    }
+  }
+
+  async function handleSetupBuiltinSession() {
+    setBuiltinSetupLoading(true)
+    try {
+      const result = await api.automation.builtin.setupSession()
+      toast.success(result.message ?? "Browser opened")
+      const poll = async () => {
+        const status = await api.automation.builtin.sessionStatus()
+        setBuiltinSessionStatus(status)
+        if (status.has_session) setBuiltinSetupLoading(false)
+        else setTimeout(poll, 3000)
+      }
+      setTimeout(poll, 3000)
+    } catch {
+      toast.error("Failed to open browser")
+      setBuiltinSetupLoading(false)
     }
   }
 
@@ -268,6 +316,16 @@ export default function SettingsPage() {
   ) : sessionStatus.expired ? (
     <span className="flex items-center gap-1 text-xs text-red-500 font-normal">
       <XCircle className="h-3.5 w-3.5" /> Expired
+    </span>
+  ) : (
+    <span className="flex items-center gap-1 text-xs text-orange-500 font-normal">
+      <XCircle className="h-3.5 w-3.5" /> No session
+    </span>
+  )
+
+  const builtinSessionBadge = builtinSessionStatus === null ? null : builtinSessionStatus.has_session ? (
+    <span className="flex items-center gap-1 text-xs text-green-600 font-normal">
+      <CheckCircle className="h-3.5 w-3.5" /> Active
     </span>
   ) : (
     <span className="flex items-center gap-1 text-xs text-orange-500 font-normal">
@@ -533,14 +591,145 @@ export default function SettingsPage() {
           </div>
         </CollapsibleSection>
 
+        {/* Builtin */}
+        <CollapsibleSection title="Builtin" badge={builtinSessionBadge}>
+          {/* Session */}
+          <div className="space-y-3 pb-2 border-b">
+            <div className="flex items-center gap-3">
+              {builtinSessionStatus === null ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : builtinSessionStatus.has_session ? (
+                <div className="flex items-center gap-2 text-green-600">
+                  <CheckCircle className="h-4 w-4" />
+                  <span className="text-sm font-medium">Session active</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-orange-500">
+                  <XCircle className="h-4 w-4" />
+                  <span className="text-sm font-medium">No session</span>
+                </div>
+              )}
+              <Button variant="outline" size="sm" onClick={handleSetupBuiltinSession} disabled={builtinSetupLoading}>
+                {builtinSetupLoading ? (
+                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                ) : (
+                  <Terminal className="h-4 w-4 mr-1.5" />
+                )}
+                {builtinSessionStatus?.has_session ? "Re-authenticate" : "Set Up Session"}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Opens a browser for manual login. Cookies saved to ~/.apply4me/builtin_cookies.json.
+              Login is optional — Builtin listings are publicly accessible without auth.
+            </p>
+          </div>
+
+          {/* Keywords */}
+          <div className="space-y-1.5">
+            <Label>Job Keywords</Label>
+            <Input
+              value={builtinKeywordsInput}
+              onChange={e => setBuiltinKeywordsInput(e.target.value)}
+              placeholder="QA Engineer, SDET, Test Engineer"
+            />
+            <p className="text-xs text-muted-foreground">Comma-separated, max 5 positions. Each is searched separately.</p>
+          </div>
+
+          {/* Work Type */}
+          <div className="space-y-1.5">
+            <Label>Work Type</Label>
+            <div className="flex gap-1.5">
+              {WORK_TYPES.map(wt => {
+                const active = (config.builtin.work_types ?? []).includes(wt.value)
+                return (
+                  <button
+                    key={wt.value}
+                    type="button"
+                    onClick={() => toggleBuiltinWorkType(wt.value)}
+                    className={cn(
+                      "px-3 py-1.5 text-sm border rounded-md transition-colors",
+                      active
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background text-foreground border-input hover:bg-accent"
+                    )}
+                  >
+                    {wt.label}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">Select one or more. Leave none selected for any type.</p>
+          </div>
+
+          {/* Date range */}
+          <div className="space-y-1.5">
+            <Label>Date Posted</Label>
+            <div className="flex gap-1.5">
+              {BUILTIN_DATE_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setConfig(c => ({ ...c, builtin: { ...c.builtin, days_since_updated: opt.value } }))}
+                  className={cn(
+                    "px-3 py-1.5 text-sm border rounded-md transition-colors",
+                    config.builtin.days_since_updated === opt.value
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background text-foreground border-input hover:bg-accent"
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setConfig(c => ({ ...c, builtin: { ...c.builtin, days_since_updated: null } }))}
+                className={cn(
+                  "px-3 py-1.5 text-sm border rounded-md transition-colors",
+                  config.builtin.days_since_updated === null
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background text-foreground border-input hover:bg-accent"
+                )}
+              >
+                Any
+              </button>
+            </div>
+          </div>
+
+          {/* Location */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Country</Label>
+              <select
+                value={config.builtin.country}
+                onChange={e => setConfig(c => ({ ...c, builtin: { ...c.builtin, country: e.target.value, state: "" } }))}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">— Any —</option>
+                {BUILTIN_COUNTRIES.map(c => (
+                  <option key={c.code} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>State <span className="text-muted-foreground">(US only)</span></Label>
+              <select
+                value={config.builtin.state}
+                onChange={e => setConfig(c => ({ ...c, builtin: { ...c.builtin, state: e.target.value } }))}
+                disabled={config.builtin.country !== "United States"}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
+              >
+                <option value="">— Any state —</option>
+                {US_STATES.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </CollapsibleSection>
+
         {/* Indeed */}
         <CollapsibleSection title="Indeed">
           <ComingSoonContent name="Indeed" />
-        </CollapsibleSection>
-
-        {/* Builtin */}
-        <CollapsibleSection title="Builtin">
-          <BuiltinSessionSetup />
         </CollapsibleSection>
 
         {/* Jobright */}

@@ -157,7 +157,15 @@ export default function HomePage() {
     if (sources.includes("builtin")) {
       try {
         setScrapingSource("builtin")
-        await api.automation.builtin.scrape({ keywords, work_types: workTypes })
+        const b = cfg.builtin ?? {}
+        const builtinKeywords = b.keywords?.length ? b.keywords : keywords
+        await api.automation.builtin.scrape({
+          keywords: builtinKeywords,
+          work_types: b.work_types ?? workTypes,
+          days_since_updated: b.days_since_updated ?? null,
+          country: b.country ?? "United States",
+          state: b.state ?? "",
+        })
         await pollUntilDone(api.automation.builtin.scrapeStatus)
         toast.success("Builtin scrape finished")
       } catch {

@@ -135,7 +135,7 @@ export const api = {
         request<{ has_session: boolean }>("/api/automation/builtin/session-status"),
       setupSession: () =>
         request<{ status: string; message: string }>("/api/automation/builtin/setup-session", { method: "POST" }),
-      scrape: (config: { keywords: string[]; work_types?: string[] }) =>
+      scrape: (config: { keywords: string[]; work_types?: string[]; days_since_updated?: number | null; country?: string; state?: string }) =>
         request<{ status: string }>("/api/automation/builtin/scrape", {
           method: "POST",
           body: JSON.stringify(config),
