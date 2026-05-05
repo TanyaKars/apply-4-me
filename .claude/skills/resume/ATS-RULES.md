@@ -24,6 +24,8 @@
 - Use standard section names: Summary, Experience, Skills, Education, Certifications
   - Do NOT rename to "What I've Done", "About Me", "Tech Stack", etc.
 - Use plain bullet points (hyphen or dot) — no icons, tables, or columns in the text layer
+- No images, logos, charts, or infographics — ATS parsers skip them entirely
+- Put contact info (name, email, phone, location, LinkedIn) in the document body, NOT in headers or footers — ATS often ignores header/footer regions
 - Spell out dates in "Month Year – Month Year" format — avoid abbreviations
 - Job titles must match or closely mirror common industry titles
   - Do NOT use internal/creative titles like "Quality Champion" — use "QA Engineer"

@@ -61,7 +61,7 @@ RESUME_JSON_SCHEMA = """{
   "experience": [
     {
       "title": "Job Title",
-      "company": "Company Name",
+      "company": "Full Company Name exactly as in SKILL.md (e.g. 'PASV | United States (Part-time)')",
       "dates": "Month Year – Month Year",
       "bullets": ["Achievement or responsibility", "..."]
     }
@@ -93,7 +93,10 @@ async def tailor_resume(skill_md: str, jd_text: str) -> dict:
 Rules:
 - Follow every preference stated in SKILL.md exactly — tone, bullet count, word choices, what to avoid, everything
 - Do NOT fabricate experience, skills, or companies not mentioned in SKILL.md
-- If the candidate held multiple roles at the same company, create a SEPARATE experience entry for each — never combine with "/" or "and"
+- If the candidate held multiple roles at the same company, create a SEPARATE experience entry for each role — never combine with "/" or "and", never drop any role
+- The "title" field must contain ONLY the job title (e.g. "QA Lead") — never embed dates in the title
+- The "dates" field must contain ONLY the date range (e.g. "May 2019 – November 2021")
+- The "company" field must contain the FULL company string exactly as written in SKILL.md, including location and type (e.g. "PASV | United States (Part-time)")
 - Extract the exact job title from the JD and put it in personal.position
 
 Return ONLY valid JSON matching this schema, no explanation:
@@ -122,6 +125,10 @@ Instructions:
 - Follow all formatting preferences stated in the document
 - Include all experience listed
 - Present skills in the order given
+- If the candidate held multiple roles at the same company, create a SEPARATE experience entry for each role — never combine with "/" or "and", never drop any role
+- The "title" field must contain ONLY the job title (e.g. "QA Lead") — never embed dates in the title
+- The "dates" field must contain ONLY the date range (e.g. "May 2019 – November 2021")
+- The "company" field must contain the FULL company string exactly as written in SKILL.md, including location and type (e.g. "PASV | United States (Part-time)")
 
 Return ONLY valid JSON matching this schema, no explanation:
 {RESUME_JSON_SCHEMA}"""

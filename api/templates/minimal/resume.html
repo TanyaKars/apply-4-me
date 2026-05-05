@@ -82,20 +82,15 @@
     font-size: 10pt;
     font-weight: 600;
     color: #6b7280;
-    margin-bottom: 4px;
+    margin-bottom: 3px;
   }
-  .exp-role {
-    padding-left: 10px;
-    border-left: 2px solid #e5e7eb;
-    margin-bottom: 6px;
+  .exp-role-line {
+    font-size: 9pt;
+    margin-bottom: 1px;
   }
-  .exp-role-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
+  .exp-role-line .exp-title-line { font-weight: 600; }
+  .exp-role-line .exp-dates { color: #9ca3af; font-weight: 400; }
+  .exp-group-bullets { margin-top: 5px; }
 
   /* ── Education ── */
   .edu-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px; }
@@ -146,13 +141,13 @@
         {% if resume.personal.linkedin %}
         <a class="contact-icon" href="{{ resume.personal.linkedin }}">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
-          LinkedIn
+          {{ resume.personal.linkedin }}
         </a>
         {% endif %}
         {% if resume.personal.github %}
         <a class="contact-icon" href="{{ resume.personal.github }}">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
-          GitHub
+          {{ resume.personal.github }}
         </a>
         {% endif %}
       </div>
@@ -177,20 +172,20 @@
       <div class="exp-group">
         <div class="exp-group-company">{{ group.company }}</div>
         {% for role in group.roles %}
-        <div class="exp-role">
-          <div class="exp-role-header">
-            <span class="exp-title-line">{{ role.title }}</span>
-            <span class="exp-dates">{{ role.dates }}</span>
-          </div>
-          {% if role.bullets %}
-          <ul class="exp-bullets">
-            {% for bullet in role.bullets %}
-            <li>{{ bullet }}</li>
-            {% endfor %}
-          </ul>
-          {% endif %}
+        <div class="exp-role-line">
+          <span class="exp-title-line">{{ role.title }}</span>
+          {% if role.dates %} – <span class="exp-dates">{{ role.dates }}</span>{% endif %}
         </div>
         {% endfor %}
+        <ul class="exp-bullets exp-group-bullets">
+          {% for role in group.roles %}
+            {% if role.bullets %}
+              {% for bullet in role.bullets %}
+              <li>{{ bullet }}</li>
+              {% endfor %}
+            {% endif %}
+          {% endfor %}
+        </ul>
       </div>
       {% endfor %}
     {% else %}
