@@ -34,5 +34,5 @@ npm-debug.log*
 *.pdf
 
 # Other
-SKILL.md
+.claude/skills/resume/SKILL.md
 docs/ROADMAP.md

@@ -1,6 +1,6 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
-export type JobStatus = "new" | "approved" | "skipped" | "applied" | "rejected"
+export type JobStatus = "new" | "approved" | "skipped" | "applied" | "rejected" | "pending"
 export type ATSType = "greenhouse" | "lever" | "ashby" | "workday" | "icims" | "taleo" | "smartrecruiters" | "jobvite" | "brassring" | "successfactors" | "easy_apply" | "external" | "unknown"
 
 export interface Job {
@@ -94,6 +94,7 @@ export const api = {
     getTailoredData: (id: number) =>
       request<{ tailored: ResumeData | null }>(`/api/jobs/${id}/tailored-data`),
     delete: (id: number) => request<{ ok: boolean }>(`/api/jobs/${id}`, { method: "DELETE" }),
+    pend: (id: number) => request<Job>(`/api/jobs/${id}/pend`, { method: "POST" }),
     clearNew: () => request<{ deleted: number }>("/api/jobs/clear-new", { method: "DELETE" }),
   },
   resume: {

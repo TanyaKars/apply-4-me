@@ -1,5 +1,9 @@
-"""AI-guided form filler — handles any unknown ATS using Claude to interpret form fields."""
-import asyncio
+"""AI-guided form filler — LLM-driven navigation + form filling.
+
+Navigation decisions (what button to click, how to handle account walls, etc.)
+are made by Claude using NAVIGATION.md as its instruction set.
+Form field filling uses the candidate's resume data from SKILL.md.
+"""
 import json
 import os
 from pathlib import Path
@@ -19,7 +23,15 @@ def _get_api_key() -> str:
     raise ValueError("ANTHROPIC_API_KEY not set")
 
 
-# JS snippet injected into the page to extract visible, fillable form fields
+def _read_nav_skill() -> str:
+    """Load navigation instructions from .claude/skills/apply/SKILL.md."""
+    nav_path = Path(__file__).parents[2] / ".claude" / "skills" / "apply" / "SKILL.md"
+    if nav_path.exists():
+        return nav_path.read_text()
+    return ""
+
+
+# JS: extract visible, fillable form fields
 _EXTRACT_FIELDS_JS = """() => {
     const fields = [];
     let idx = 0;
@@ -49,7 +61,6 @@ _EXTRACT_FIELDS_JS = """() => {
         return el.offsetParent !== null && !el.disabled;
     }
 
-    // text / email / tel / number / url / date inputs
     document.querySelectorAll(
         'input[type="text"], input[type="email"], input[type="tel"], ' +
         'input[type="number"], input[type="url"], input[type="date"], ' +
@@ -63,7 +74,6 @@ _EXTRACT_FIELDS_JS = """() => {
         });
     });
 
-    // textareas
     document.querySelectorAll('textarea').forEach(el => {
         if (!isVisible(el)) return;
         fields.push({
@@ -73,7 +83,6 @@ _EXTRACT_FIELDS_JS = """() => {
         });
     });
 
-    // selects
     document.querySelectorAll('select').forEach(el => {
         if (!isVisible(el)) return;
         const options = Array.from(el.options).map(o => o.text.trim()).filter(Boolean);
@@ -85,7 +94,6 @@ _EXTRACT_FIELDS_JS = """() => {
         });
     });
 
-    // radio groups — one entry per group
     const radioGroups = {};
     document.querySelectorAll('input[type="radio"]').forEach(el => {
         if (!isVisible(el)) return;
@@ -105,7 +113,6 @@ _EXTRACT_FIELDS_JS = """() => {
     });
     Object.values(radioGroups).forEach(g => fields.push(g));
 
-    // standalone checkboxes
     document.querySelectorAll('input[type="checkbox"]').forEach(el => {
         if (!isVisible(el)) return;
         fields.push({
@@ -119,39 +126,42 @@ _EXTRACT_FIELDS_JS = """() => {
 }"""
 
 
+# JS: get page state for navigation decisions
+_GET_PAGE_STATE_JS = """() => {
+    const visibleText = document.body.innerText.substring(0, 3000).trim();
+
+    const clickables = [];
+    const seen = new Set();
+    document.querySelectorAll(
+        'button, a[href], [role="button"], input[type="submit"], input[type="button"]'
+    ).forEach(el => {
+        if (el.offsetParent === null || el.disabled) return;
+        const text = (el.innerText || el.value || el.getAttribute('aria-label') || '')
+            .trim().replace(/\\s+/g, ' ');
+        if (!text || seen.has(text)) return;
+        seen.add(text);
+        clickables.push({
+            tag: el.tagName.toLowerCase(),
+            text: text.substring(0, 80),
+            type: el.type || null,
+        });
+    });
+
+    return { visibleText, clickables: clickables.slice(0, 40) };
+}"""
+
+
 class AIFillerAdapter(BaseATSAdapter):
-    """General-purpose adapter that uses Claude to fill any application form."""
+    """General-purpose adapter that uses Claude to navigate and fill any application form."""
 
     def __init__(self, page: Page, resume_data: dict, pdf_path: str, jd_text: str = ""):
         super().__init__(page, resume_data, pdf_path)
         self.jd_text = jd_text
-
-    def _is_linkedin_auth(self) -> bool:
-        return "linkedin.com" in self.page.url and any(
-            p in self.page.url for p in ("oauth", "login", "authwall", "uas/login")
-        )
-
-    def _is_login_wall(self) -> bool:
-        url = self.page.url.lower()
-        title = ""  # checked separately to avoid async here
-        return any(p in url for p in (
-            "accounts.google.com", "login.microsoftonline.com", "login.live.com",
-        ))
-
-    async def _check_login_wall(self) -> str | None:
-        """Return 'linkedin', 'other', or None."""
-        if self._is_linkedin_auth():
-            return "linkedin"
-        url = self.page.url.lower()
-        title = (await self.page.title()).lower()
-        if any(p in url for p in ("accounts.google.com", "login.microsoftonline", "login.live.com")):
-            return "other"
-        if any(p in title for p in ("sign in", "log in", "login")):
-            return "other"
-        return None
+        self._nav_skill = _read_nav_skill()
+        self.stop_reason: str = ""
 
     async def _click_linkedin_apply(self) -> bool:
-        """If on a LinkedIn job page, click the Apply button and switch to the new tab."""
+        """If on a LinkedIn job page, click Apply and switch to the new tab."""
         if "linkedin.com/jobs/view/" not in self.page.url:
             return False
         try:
@@ -171,21 +181,19 @@ class AIFillerAdapter(BaseATSAdapter):
             return False
 
     async def fill_form(self, job_url: str) -> bool:
-        # LinkedIn never reaches networkidle due to background polling — use domcontentloaded
         wait = "domcontentloaded" if "linkedin.com" in job_url else "networkidle"
         await self.page.goto(job_url, wait_until=wait, timeout=30_000)
         await self.page.wait_for_timeout(2000)
 
-        # If this is a LinkedIn job page, click Apply to get to the actual ATS form
+        # LinkedIn: click Apply to reach the external ATS form
         if "linkedin.com/jobs/view/" in self.page.url:
             switched = False
             try:
                 switched = await self._click_linkedin_apply()
             except Exception as e:
-                print(f"  LinkedIn apply click failed: {e} — continuing on current page")
+                print(f"  LinkedIn apply click failed: {e}")
 
             if not switched:
-                # No new tab opened — check if an Easy Apply modal appeared instead
                 await self.page.wait_for_timeout(1000)
                 dialog = self.page.locator("div[role='dialog']")
                 if await dialog.count() > 0:
@@ -197,153 +205,184 @@ class AIFillerAdapter(BaseATSAdapter):
         for step in range(20):
             print(f"\n--- AI Filler: step {step + 1} | url: {self.page.url} ---")
 
-            wall = await self._check_login_wall()
-
-            if wall == "linkedin":
-                print("  LinkedIn auth wall detected — warming up session...")
-                return_url = self.page.url
+            # LinkedIn auth wall — handle internally, not via Claude
+            if "linkedin.com" in self.page.url and any(
+                p in self.page.url for p in ("oauth", "login", "authwall", "uas/login")
+            ):
+                print("  LinkedIn auth wall — warming up session...")
                 try:
                     await self.page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded", timeout=15_000)
                     if "feed" in self.page.url:
-                        print("  LinkedIn session active — navigating back to apply URL...")
                         await self.page.goto(job_url, wait_until="domcontentloaded", timeout=30_000)
                         await self.page.wait_for_timeout(1000)
                         continue
-                    else:
-                        print("  LinkedIn session expired.")
                 except Exception:
                     pass
-                # Session didn't work — fall through to manual login
-                print("\n  ⚠️  LinkedIn session is expired.")
-                print("  → Go to Settings in the apply4me UI and click 'Re-authenticate'.")
-                print("  → Then retry applying to this job.\n")
-                await self.page.goto(return_url, wait_until="networkidle", timeout=30_000)
-                wall = "other"
+                print("\n  ⚠️  LinkedIn session expired. Go to Settings and re-authenticate.\n")
+                return False
 
-            if wall == "other":
-                print(f"  Login wall detected ({self.page.url})")
-                print("  Please log in manually in the browser window.")
-                input("  Press ENTER once you are logged in and the form is visible: ")
-                await self.page.wait_for_load_state("networkidle", timeout=15_000)
-                await self.page.wait_for_timeout(1000)
-                continue
-
+            # Get page state and form fields
+            page_state = await self.page.evaluate(_GET_PAGE_STATE_JS)
             fields = await self.page.evaluate(_EXTRACT_FIELDS_JS)
             fillable = [f for f in fields if f.get("type") != "file"]
+            has_form = bool(fillable) and not self._looks_like_utility_form(fillable)
 
-            # If no real form fields, or only utility widget fields (email-job/save/share),
-            # look for Apply Now and click it to reach the actual application form.
-            if not fillable or self._looks_like_utility_form(fillable):
-                apply_btn = await self._find_apply_button()
-                if apply_btn:
+            # Ask Claude what to do next
+            decision = await self._decide_action(page_state, has_form)
+            action = decision.get("action", "")
+            reason = decision.get("reason", "")
+            print(f"  Claude → {action}" + (f": {reason}" if reason else ""))
+
+            if action == "done":
+                return True
+
+            if action == "stop":
+                self.stop_reason = reason
+                print(f"  Cannot proceed: {reason}")
+                return False
+
+            if action == "fill_form":
+                print(f"  Filling {len(fillable)} fields...")
+                instructions = await self._ask_claude_fill(fillable)
+                await self._apply_instructions(instructions, fillable)
+                await self._upload_resume_if_needed()
+                continue
+
+            if action == "submit":
+                await self._upload_resume_if_needed()
+                try:
+                    submit = self.page.locator(
+                        "button[type='submit'], input[type='submit'], "
+                        "button:has-text('Submit'), button:has-text('Send application'), "
+                        "button:has-text('Send Application')"
+                    ).first
+                    if await submit.is_visible(timeout=2000):
+                        print("  Submitting — pausing for review.")
+                        await self.pause_before_submit()
+                        await submit.click()
+                        await self.page.wait_for_timeout(3000)
+                        return True
+                except Exception:
+                    pass
+                print("  Submit button not found.")
+                inp = input("  Press ENTER to retry or 'q' to quit: ").strip().lower()
+                if inp == "q":
+                    return False
+                continue
+
+            if action == "click":
+                text = decision.get("text", "")
+                print(f"  Clicking: {text!r}")
+                clicked = await self._click_by_text(text)
+                if not clicked:
+                    print(f"  Element not found: {text!r}")
+                    inp = input("  [c] continue / [q] quit: ").strip().lower()
+                    if inp == "q":
+                        return False
+                await self.page.wait_for_timeout(2000)
+                continue
+
+            # Unexpected response — let user decide
+            print(f"  Unexpected action {action!r}.")
+            inp = input("  [c] continue / [q] quit: ").strip().lower()
+            if inp == "q":
+                return False
+            await self.page.wait_for_timeout(2000)
+
+        return False
+
+    async def _decide_action(self, page_state: dict, has_form: bool) -> dict:
+        """Ask Claude what single action to take on the current page."""
+        try:
+            import anthropic
+            api_key = _get_api_key()
+        except Exception as e:
+            print(f"  Claude unavailable: {e}")
+            return {"action": "stop", "reason": "claude unavailable"}
+
+        client = anthropic.Anthropic(api_key=api_key)
+        title = await self.page.title()
+
+        prompt = f"""You are controlling a browser to submit a job application.
+
+NAVIGATION INSTRUCTIONS:
+{self._nav_skill}
+
+CURRENT PAGE:
+URL: {self.page.url}
+Title: {title}
+Has fillable application form fields: {has_form}
+
+Visible page text (first 3000 chars):
+{page_state['visibleText']}
+
+Visible buttons / links:
+{json.dumps(page_state['clickables'], indent=2)}
+
+What is the single best next action? Return JSON only:
+- {{"action": "fill_form"}} — the application form is visible and ready to fill
+- {{"action": "click", "text": "exact text of the button or link to click"}}
+- {{"action": "submit"}} — all fields are filled, ready to submit
+- {{"action": "done"}} — application confirmed as submitted
+- {{"action": "stop", "reason": "brief reason"}} — cannot proceed"""
+
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=256,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        text = message.content[0].text.strip()
+        if text.startswith("```"):
+            text = "\n".join(text.split("\n")[1:-1])
+        try:
+            return json.loads(text)
+        except Exception:
+            return {"action": "stop", "reason": f"could not parse Claude response: {text}"}
+
+    async def _click_by_text(self, text: str) -> bool:
+        """Find and click an element by its visible text, following new tabs."""
+        for role in ("button", "link"):
+            el = self.page.get_by_role(role, name=text).first
+            try:
+                if await el.is_visible(timeout=500):
                     url_before = self.page.url
-                    print("  Utility/JD page — clicking Apply button to reach application form...")
                     try:
-                        async with self.page.context.expect_page(timeout=3000) as new_page_info:
-                            await apply_btn.click()
+                        async with self.page.context.expect_page(timeout=2000) as new_page_info:
+                            await el.click()
                         new_page = await new_page_info.value
                         await new_page.wait_for_load_state("domcontentloaded", timeout=20_000)
                         self.page = new_page
                         print(f"  Opened new tab: {self.page.url}")
                     except Exception:
-                        await self.page.wait_for_timeout(2000)
+                        await self.page.wait_for_timeout(1500)
                         if self.page.url != url_before:
                             await self.page.wait_for_load_state("networkidle", timeout=15_000)
-                    continue
-                elif not fillable:
-                    print("  No fillable fields on this step.")
-
-            if fillable and not self._looks_like_utility_form(fillable):
-                print(f"  {len(fillable)} fillable fields — asking Claude...")
-                instructions = await self._ask_claude(fillable)
-                await self._apply_instructions(instructions, fillable)
-
-            await self._upload_resume_if_needed()
-
-            # Check for submit button — must be type=submit OR explicit submit/send text
-            # Do NOT match generic "Apply" buttons (those are navigation, not submission)
-            try:
-                submit = self.page.locator(
-                    "button[type='submit'], input[type='submit'], "
-                    "button:has-text('Submit'), button:has-text('Send application'), "
-                    "button:has-text('Send Application')"
-                ).first
-                if await submit.is_visible(timeout=2000):
-                    label = (await submit.inner_text()).strip().lower()
-                    if any(w in label for w in ("submit", "send application")):
-                        print("  Submit button found — pausing for review.")
-                        await self.pause_before_submit()
-                        await submit.click()
-                        await self.page.wait_for_timeout(3000)
-                        return True
+                    return True
             except Exception:
                 pass
-
-            # Check for next/continue button
-            try:
-                next_btn = self.page.locator(
-                    "button:has-text('Next'), button:has-text('Continue'), "
-                    "button:has-text('next'), button:has-text('continue'), "
-                    "button:has-text('Save and continue'), "
-                    "button:has-text('Review'), button[aria-label*='Review'], "
-                    "button[data-live-test-easy-apply-review-button]"
-                ).first
-                if await next_btn.is_visible(timeout=2000):
-                    await next_btn.click()
-                    await self.page.wait_for_timeout(2000)
-                    continue
-            except Exception:
-                pass
-
-
-            # Nothing to click — pause and let user decide
-            print("  No next/submit button found.")
-            action = input("  [c] continue scanning / [q] quit: ").strip().lower()
-            if action == "q":
-                break
-            await self.page.wait_for_timeout(2000)
-
+        # Fallback: any visible element containing the text
+        el = self.page.get_by_text(text, exact=False).first
+        try:
+            if await el.is_visible(timeout=500):
+                await el.click()
+                await self.page.wait_for_timeout(1500)
+                return True
+        except Exception:
+            pass
         return False
 
     def _looks_like_utility_form(self, fields: list[dict]) -> bool:
         """Return True when visible fields are a widget (email-job/save/share), not the real form."""
         labels = " ".join(f.get("label", "").lower() for f in fields)
-        # Strong indicators — unambiguous widget labels, check regardless of field count
         strong = {"recipient", "save job", "save this job", "email this job", "email this position"}
         if any(kw in labels for kw in strong):
             return True
-        # Weak indicators — only reliable when form is small
         if len(fields) > 5:
             return False
         weak = {"email this", "share this", "notify me", "job alert"}
         return any(kw in labels for kw in weak)
 
-    async def _find_apply_button(self):
-        """Find an Apply / Apply Now button on the page, avoiding social/login variants."""
-        import re as _re
-        # Exact matches first (highest confidence), then prefix matches
-        patterns = [
-            _re.compile(r"^apply now$", _re.IGNORECASE),
-            _re.compile(r"^apply$", _re.IGNORECASE),
-            _re.compile(r"^apply for this (job|position|role)$", _re.IGNORECASE),
-            _re.compile(r"^apply to this (job|position|role)$", _re.IGNORECASE),
-        ]
-        for pat in patterns:
-            btn = self.page.get_by_role("button", name=pat).first
-            try:
-                if await btn.is_visible(timeout=500):
-                    return btn
-            except Exception:
-                pass
-            link = self.page.get_by_role("link", name=pat).first
-            try:
-                if await link.is_visible(timeout=500):
-                    return link
-            except Exception:
-                pass
-        return None
-
-    async def _ask_claude(self, fields: list[dict]) -> list[dict]:
+    async def _ask_claude_fill(self, fields: list[dict]) -> list[dict]:
         """Send form fields to Claude, get back fill instructions."""
         try:
             import anthropic
@@ -354,7 +393,6 @@ class AIFillerAdapter(BaseATSAdapter):
 
         client = anthropic.Anthropic(api_key=api_key)
 
-        # Slim down field list for the prompt
         slim = []
         for f in fields:
             item = {"idx": f["idx"], "type": f["type"], "label": f.get("label", "")}
@@ -396,8 +434,7 @@ Return ONLY a JSON array, no explanation:
         )
         text = message.content[0].text.strip()
         if text.startswith("```"):
-            lines = text.split("\n")
-            text = "\n".join(lines[1:-1])
+            text = "\n".join(text.split("\n")[1:-1])
         return json.loads(text)
 
     async def _apply_instructions(self, instructions: list[dict], fields: list[dict]):
@@ -419,7 +456,6 @@ Return ONLY a JSON array, no explanation:
             name = field.get("name", "")
             label = field.get("label", "")
 
-            # Use attribute selector — CSS `#id` breaks on IDs containing `:` or `.`
             sel = f'[id="{fid}"]' if fid else (f"[name='{name}']" if name else None)
             if not sel:
                 print(f"  Skipping field idx={idx} ({label!r}) — no selector")
@@ -442,12 +478,10 @@ Return ONLY a JSON array, no explanation:
                         print(f"  Selected {label!r}: {value}")
 
                 elif ftype == "radio":
-                    # Try by value attribute first, then by adjacent label text
                     radio = self.page.locator(
                         f"input[type='radio'][name='{name}'][value='{value}']"
                     ).first
                     if not await radio.is_visible(timeout=1000):
-                        # Search all radios in the group, match by label
                         radios = self.page.locator(f"input[type='radio'][name='{name}']")
                         count = await radios.count()
                         for i in range(count):

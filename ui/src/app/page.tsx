@@ -214,6 +214,7 @@ export default function HomePage() {
     approved: jobs.filter(j => j.status === "approved").length,
     applied:  jobs.filter(j => j.status === "applied").length,
     skipped:  jobs.filter(j => j.status === "skipped").length,
+    pending:  jobs.filter(j => j.status === "pending").length,
   }
 
   const STATUS_FILTERS = [
@@ -221,6 +222,7 @@ export default function HomePage() {
     { value: "new",      label: "New",      count: counts.new },
     { value: "approved", label: "Approved", count: counts.approved },
     { value: "applied",  label: "Applied",  count: counts.applied },
+    { value: "pending",  label: "Pending",  count: counts.pending },
     { value: "skipped",  label: "Skipped",  count: counts.skipped },
   ]
 
@@ -236,7 +238,7 @@ export default function HomePage() {
         <div>
           <h1 className="text-2xl font-bold">Job Feed</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {counts.new} new · {counts.approved} approved · {counts.applied} applied · {counts.skipped} skipped
+            {counts.new} new · {counts.approved} approved · {counts.applied} applied · {counts.pending > 0 ? `${counts.pending} pending · ` : ""}{counts.skipped} skipped
           </p>
         </div>
         <div className="flex items-center gap-2">

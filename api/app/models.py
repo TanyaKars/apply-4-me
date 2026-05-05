@@ -11,6 +11,7 @@ class JobStatus(str, Enum):
     skipped = "skipped"
     applied = "applied"
     rejected = "rejected"
+    pending = "pending"
 
 
 class ATSType(str, Enum):

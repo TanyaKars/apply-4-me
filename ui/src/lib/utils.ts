@@ -18,6 +18,7 @@ export const STATUS_COLORS: Record<string, string> = {
   skipped: "bg-gray-50 text-gray-500 border-gray-200",
   applied: "bg-purple-50 text-purple-700 border-purple-200",
   rejected: "bg-red-50 text-red-600 border-red-200",
+  pending: "bg-amber-50 text-amber-700 border-amber-200",
 }
 
 export const SOURCE_LABELS: Record<string, string> = {

@@ -86,14 +86,18 @@ async def apply_to_job(job_id: int):
         try:
             success = await adapter.fill_form(apply_target)
 
-            if success:
-                # Update job status
-                async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient() as client:
+                if success:
                     await client.patch(
                         f"{BACKEND_URL}/api/jobs/{job_id}",
                         json={"status": "applied"}
                     )
-                print(f"Job {job_id} marked as applied!")
+                    print(f"Job {job_id} marked as applied!")
+                else:
+                    stop_reason = getattr(adapter, "stop_reason", "")
+                    if "account creation" in stop_reason.lower():
+                        await client.post(f"{BACKEND_URL}/api/jobs/{job_id}/pend")
+                        print(f"Job {job_id} moved to pending — account creation required.")
         finally:
             await browser.close()
 

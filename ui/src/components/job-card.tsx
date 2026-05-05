@@ -3,12 +3,13 @@
 import { useState } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
-import { Check, X, ExternalLink, MapPin, Building2, RotateCcw } from "lucide-react"
+import { Check, X, ExternalLink, MapPin, Building2, RotateCcw, UserCheck } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn, STATUS_COLORS, SOURCE_COLORS, SOURCE_LABELS, getJobSource, formatDate } from "@/lib/utils"
 import { api, type Job } from "@/lib/api"
+import { addPendingApply } from "@/components/apply-confirm-provider"
 
 interface JobCardProps {
   job: Job
@@ -17,6 +18,11 @@ interface JobCardProps {
 
 export function JobCard({ job, onUpdate }: JobCardProps) {
   const [loading, setLoading] = useState<"approve" | "skip" | "reconsider" | null>(null)
+
+  function handleApplyManually() {
+    window.open(job.url, "_blank")
+    addPendingApply({ jobId: job.id, title: job.title, company: job.company })
+  }
 
   async function handleApprove() {
     setLoading("approve")
@@ -148,6 +154,33 @@ export function JobCard({ job, onUpdate }: JobCardProps) {
                     View & Apply
                   </Button>
                 </Link>
+              </>
+            )}
+            {job.status === "pending" && (
+              <>
+                <Link href={`/jobs/${job.id}`}>
+                  <Button size="sm" variant="outline" className="h-8">
+                    View
+                  </Button>
+                </Link>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 border-red-200 text-red-600 hover:bg-red-50"
+                  onClick={handleSkip}
+                  disabled={loading !== null}
+                >
+                  <X className="h-3.5 w-3.5 mr-1" />
+                  Skip
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8"
+                  onClick={handleApplyManually}
+                >
+                  <UserCheck className="h-3.5 w-3.5 mr-1" />
+                  Apply Manually
+                </Button>
               </>
             )}
             {job.status === "skipped" && (
