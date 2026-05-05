@@ -193,6 +193,34 @@ Return only the SKILL.md content, no explanation."""
     return message.content[0].text.strip()
 
 
+async def score_job(skill_md: str, jd_text: str, title: str) -> dict:
+    """Return {"score": 0-100, "reason": str} for how well the candidate matches the job."""
+    client = anthropic.Anthropic(api_key=get_api_key())
+    prompt = f"""Score how well this candidate matches the job on a scale of 0-100.
+
+--- CANDIDATE BACKGROUND (SKILL.md) ---
+{skill_md[:3000]}
+
+--- JOB ---
+Title: {title}
+{jd_text[:2000]}
+
+Scoring guide:
+- 80-100: Strong match — most required skills/experience align
+- 50-79:  Partial match — some key requirements met
+- 0-49:   Weak match — significant skill or experience gaps
+
+Return ONLY valid JSON, no explanation:
+{{"score": <integer 0-100>, "reason": "<one sentence, max 100 chars>"}}"""
+
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=128,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return _parse_json_response(message.content[0].text)
+
+
 async def generate_cover_letter(skill_md: str, jd_text: str, company: str) -> str:
     """Generate a cover letter from SKILL.md + job description."""
     client = anthropic.Anthropic(api_key=get_api_key())

@@ -13,3 +13,16 @@ def create_db_and_tables():
 def get_session():
     with Session(engine) as session:
         yield session
+
+
+def migrate_db():
+    """Add any missing columns to existing tables (safe to run on every startup)."""
+    with engine.connect() as conn:
+        existing = {row[1] for row in conn.execute(__import__("sqlalchemy").text("PRAGMA table_info(job)"))}
+        for col, ddl in [
+            ("match_score",  "ALTER TABLE job ADD COLUMN match_score INTEGER"),
+            ("match_reason", "ALTER TABLE job ADD COLUMN match_reason TEXT"),
+        ]:
+            if col not in existing:
+                conn.execute(__import__("sqlalchemy").text(ddl))
+        conn.commit()

@@ -37,6 +37,8 @@ class Job(SQLModel, table=True):
     applied_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     tailored_data: Optional[str] = Field(default=None, sa_column=Column(Text))  # JSON
+    match_score: Optional[int] = None
+    match_reason: Optional[str] = Field(default=None, sa_column=Column(Text))
 
 
 class ResumeConfig(SQLModel, table=True):

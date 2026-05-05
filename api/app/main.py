@@ -4,13 +4,14 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from app.db import create_db_and_tables
+from app.db import create_db_and_tables, migrate_db
 from app.api import jobs, resume, automation
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_db_and_tables()
+    migrate_db()
     yield
 
 

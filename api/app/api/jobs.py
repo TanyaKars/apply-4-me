@@ -5,12 +5,33 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlmodel import Session, select
-from app.db import get_session
+from app.db import get_session, engine
 from app.models import Job, JobCreate, JobUpdate, JobStatus
 from app.services import claude as claude_service
 from app.services import pdf as pdf_service
 
 router = APIRouter()
+
+
+async def _score_jobs_bg(job_ids: list[int]) -> None:
+    """Background task: score each job with Claude Haiku and persist result."""
+    try:
+        skill_md = claude_service.read_skill_md()
+    except FileNotFoundError:
+        return
+    with Session(engine) as session:
+        for job_id in job_ids:
+            job = session.get(Job, job_id)
+            if not job or not job.jd_text:
+                continue
+            try:
+                result = await claude_service.score_job(skill_md, job.jd_text, job.title)
+                job.match_score = int(result.get("score", 0))
+                job.match_reason = result.get("reason", "")
+                session.add(job)
+                session.commit()
+            except Exception as e:
+                print(f"[score] job {job_id} failed: {e}")
 
 
 @router.get("/", response_model=List[Job])
@@ -33,7 +54,7 @@ def get_job(job_id: int, session: Session = Depends(get_session)):
 
 
 @router.post("/", response_model=Job)
-def create_job(job_in: JobCreate, session: Session = Depends(get_session)):
+def create_job(job_in: JobCreate, background_tasks: BackgroundTasks, session: Session = Depends(get_session)):
     # Deduplicate by URL
     existing = session.exec(select(Job).where(Job.url == job_in.url)).first()
     if existing:
@@ -42,11 +63,13 @@ def create_job(job_in: JobCreate, session: Session = Depends(get_session)):
     session.add(job)
     session.commit()
     session.refresh(job)
+    if job.jd_text:
+        background_tasks.add_task(_score_jobs_bg, [job.id])
     return job
 
 
 @router.post("/bulk", response_model=List[Job])
-def bulk_create_jobs(jobs_in: List[JobCreate], session: Session = Depends(get_session)):
+def bulk_create_jobs(jobs_in: List[JobCreate], background_tasks: BackgroundTasks, session: Session = Depends(get_session)):
     created = []
     for job_in in jobs_in:
         # Deduplicate by URL
@@ -75,6 +98,9 @@ def bulk_create_jobs(jobs_in: List[JobCreate], session: Session = Depends(get_se
         session.commit()
         session.refresh(job)
         created.append(job)
+    ids_to_score = [j.id for j in created if j.jd_text]
+    if ids_to_score:
+        background_tasks.add_task(_score_jobs_bg, ids_to_score)
     return created
 
 
@@ -166,6 +192,26 @@ def mark_applied(job_id: int, session: Session = Depends(get_session)):
         raise HTTPException(status_code=404, detail="Job not found")
     job.status = JobStatus.applied
     job.applied_at = datetime.utcnow()
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return job
+
+
+@router.post("/{job_id}/score", response_model=Job)
+async def score_job(job_id: int, session: Session = Depends(get_session)):
+    job = session.get(Job, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.jd_text:
+        raise HTTPException(status_code=400, detail="Job has no JD text")
+    try:
+        skill_md = claude_service.read_skill_md()
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    result = await claude_service.score_job(skill_md, job.jd_text, job.title)
+    job.match_score = int(result.get("score", 0))
+    job.match_reason = result.get("reason", "")
     session.add(job)
     session.commit()
     session.refresh(job)

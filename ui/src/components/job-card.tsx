@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
-import { Check, X, ExternalLink, MapPin, Building2, RotateCcw, UserCheck } from "lucide-react"
+import { Check, X, ExternalLink, MapPin, Building2, RotateCcw, UserCheck, Percent } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -17,7 +17,20 @@ interface JobCardProps {
 }
 
 export function JobCard({ job, onUpdate }: JobCardProps) {
-  const [loading, setLoading] = useState<"approve" | "skip" | "reconsider" | null>(null)
+  const [loading, setLoading] = useState<"approve" | "skip" | "reconsider" | "score" | null>(null)
+
+  async function handleScore() {
+    setLoading("score")
+    try {
+      const updated = await api.jobs.score(job.id)
+      onUpdate(updated)
+      toast.success(`Match score: ${updated.match_score}%`)
+    } catch {
+      toast.error("Failed to score job")
+    } finally {
+      setLoading(null)
+    }
+  }
 
   function handleApplyManually() {
     window.open(job.url, "_blank")
@@ -82,6 +95,21 @@ export function JobCard({ job, onUpdate }: JobCardProps) {
               <Badge className={cn("text-xs border", STATUS_COLORS[job.status])}>
                 {job.status}
               </Badge>
+              {job.match_score != null && (
+                <Badge
+                  title={job.match_reason ?? undefined}
+                  className={cn(
+                    "text-xs border font-mono",
+                    job.match_score >= 70
+                      ? "bg-green-50 text-green-700 border-green-300"
+                      : job.match_score >= 40
+                        ? "bg-yellow-50 text-yellow-700 border-yellow-300"
+                        : "bg-red-50 text-red-600 border-red-300"
+                  )}
+                >
+                  {job.match_score}%
+                </Badge>
+              )}
               <Badge className={cn("text-xs border", sourceColor)}>
                 {sourceLabel}
               </Badge>
@@ -107,6 +135,18 @@ export function JobCard({ job, onUpdate }: JobCardProps) {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {job.jd_text && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                title="Score match with your resume"
+                onClick={handleScore}
+                disabled={loading === "score"}
+              >
+                <Percent className={cn("h-3.5 w-3.5", loading === "score" && "animate-spin")} />
+              </Button>
+            )}
             {job.url && (
               <a href={job.url} target="_blank" rel="noopener noreferrer">
                 <Button variant="ghost" size="icon" className="h-8 w-8">

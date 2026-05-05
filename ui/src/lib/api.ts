@@ -18,6 +18,8 @@ export interface Job {
   applied_at: string | null
   created_at: string
   tailored_data: string | null
+  match_score: number | null
+  match_reason: string | null
 }
 
 export interface ResumePersonal {
@@ -96,6 +98,7 @@ export const api = {
     delete: (id: number) => request<{ ok: boolean }>(`/api/jobs/${id}`, { method: "DELETE" }),
     pend: (id: number) => request<Job>(`/api/jobs/${id}/pend`, { method: "POST" }),
     clearNew: () => request<{ deleted: number }>("/api/jobs/clear-new", { method: "DELETE" }),
+    score: (id: number) => request<Job>(`/api/jobs/${id}/score`, { method: "POST" }),
   },
   resume: {
     settings: () => request<{ template: string; include_photo: boolean; photo_path: string; group_experience: boolean }>("/api/resume/settings"),
