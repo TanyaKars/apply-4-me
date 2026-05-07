@@ -619,8 +619,9 @@ export default function SettingsPage() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Opens a browser for manual login. Cookies saved to ~/.apply4me/builtin_cookies.json.
-              Login is optional — Builtin listings are publicly accessible without auth.
+              Opens a browser window to Builtin&apos;s login page. Enter your email — Builtin will
+              send you a one-time link. Copy that link from your email and paste it into the
+              browser window. Once authenticated, the browser closes automatically.
             </p>
           </div>
 
