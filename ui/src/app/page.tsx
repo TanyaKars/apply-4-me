@@ -81,6 +81,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
   const [scrapingSource, setScrapingSource] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState("all")
+  const [matchFilter, setMatchFilter] = useState("all")
   const [search, setSearch] = useState("")
   const [linkedinSession, setLinkedinSession] = useState<{ has_session: boolean; expires_at: number | null } | null>(null)
   const [builtinSession, setBuiltinSession]   = useState<{ has_session: boolean } | null>(null)
@@ -195,9 +196,18 @@ export default function HomePage() {
     setJobs(prev => prev.map(j => j.id === updated.id ? updated : j))
   }
 
+  function matchBucket(score: number | null | undefined) {
+    if (score === null || score === undefined) return "unscored"
+    if (score >= 80) return "excellent"
+    if (score >= 60) return "good"
+    if (score >= 40) return "fair"
+    return "low"
+  }
+
   const filtered = jobs.filter(j => {
     if (statusFilter === "all" && j.status === "skipped") return false
     if (statusFilter !== "all" && j.status !== statusFilter) return false
+    if (matchFilter !== "all" && matchBucket(j.match_score) !== matchFilter) return false
     if (search) {
       const q = search.toLowerCase()
       if (
@@ -216,6 +226,21 @@ export default function HomePage() {
     skipped:  jobs.filter(j => j.status === "skipped").length,
     pending:  jobs.filter(j => j.status === "pending").length,
   }
+
+  const matchCounts = {
+    excellent: jobs.filter(j => matchBucket(j.match_score) === "excellent").length,
+    good:      jobs.filter(j => matchBucket(j.match_score) === "good").length,
+    fair:      jobs.filter(j => matchBucket(j.match_score) === "fair").length,
+    low:       jobs.filter(j => matchBucket(j.match_score) === "low").length,
+  }
+
+  const MATCH_FILTERS = [
+    { value: "all",       label: "All matches" },
+    { value: "excellent", label: "Excellent",  count: matchCounts.excellent, color: "green"  },
+    { value: "good",      label: "Good",       count: matchCounts.good,      color: "yellow" },
+    { value: "fair",      label: "Fair",       count: matchCounts.fair,      color: "orange" },
+    { value: "low",       label: "Low",        count: matchCounts.low,       color: "red"    },
+  ] as const
 
   const STATUS_FILTERS = [
     { value: "all",      label: "All" },
@@ -283,7 +308,7 @@ export default function HomePage() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 mb-4">
+      <div className="flex gap-3 mb-2">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -318,6 +343,34 @@ export default function HomePage() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Match filter */}
+      <div className="flex gap-1 mb-4">
+        {MATCH_FILTERS.map(f => {
+          const active = matchFilter === f.value
+          const colorCls = "color" in f ? {
+            green:  active ? "bg-green-600  text-white border-green-600"  : "border-green-300  text-green-700  hover:bg-green-50",
+            yellow: active ? "bg-yellow-500 text-white border-yellow-500" : "border-yellow-300 text-yellow-700 hover:bg-yellow-50",
+            orange: active ? "bg-orange-500 text-white border-orange-500" : "border-orange-300 text-orange-700 hover:bg-orange-50",
+            red:    active ? "bg-red-500    text-white border-red-500"    : "border-red-300    text-red-700    hover:bg-red-50",
+          }[f.color] : active ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-input hover:bg-accent"
+          return (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => setMatchFilter(f.value)}
+              className={cn("px-3 py-1 text-xs border rounded-md transition-colors", colorCls)}
+            >
+              {f.label}
+              {"count" in f && f.count > 0 && (
+                <span className={cn("ml-1.5 rounded-full px-1.5 py-0.5", active ? "bg-white/25" : "bg-muted")}>
+                  {f.count}
+                </span>
+              )}
+            </button>
+          )
+        })}
       </div>
 
       {/* Job list */}
