@@ -204,9 +204,13 @@ export default function HomePage() {
     return "low"
   }
 
-  const filtered = jobs.filter(j => {
+  const statusFiltered = jobs.filter(j => {
     if (statusFilter === "all" && j.status === "skipped") return false
     if (statusFilter !== "all" && j.status !== statusFilter) return false
+    return true
+  })
+
+  const filtered = statusFiltered.filter(j => {
     if (matchFilter !== "all" && matchBucket(j.match_score) !== matchFilter) return false
     if (search) {
       const q = search.toLowerCase()
@@ -228,10 +232,10 @@ export default function HomePage() {
   }
 
   const matchCounts = {
-    excellent: jobs.filter(j => matchBucket(j.match_score) === "excellent").length,
-    good:      jobs.filter(j => matchBucket(j.match_score) === "good").length,
-    fair:      jobs.filter(j => matchBucket(j.match_score) === "fair").length,
-    low:       jobs.filter(j => matchBucket(j.match_score) === "low").length,
+    excellent: statusFiltered.filter(j => matchBucket(j.match_score) === "excellent").length,
+    good:      statusFiltered.filter(j => matchBucket(j.match_score) === "good").length,
+    fair:      statusFiltered.filter(j => matchBucket(j.match_score) === "fair").length,
+    low:       statusFiltered.filter(j => matchBucket(j.match_score) === "low").length,
   }
 
   const MATCH_FILTERS = [
