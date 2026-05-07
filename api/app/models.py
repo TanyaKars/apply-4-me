@@ -34,6 +34,7 @@ class Job(SQLModel, table=True):
     ats_type: ATSType = Field(default=ATSType.unknown)
     tailored_resume_path: Optional[str] = None
     cover_letter: Optional[str] = Field(default=None, sa_column=Column(Text))
+    cover_letter_path: Optional[str] = None
     applied_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     tailored_data: Optional[str] = Field(default=None, sa_column=Column(Text))  # JSON

@@ -207,8 +207,17 @@ export default function JobDetailPage() {
         </Button>
         <Button variant="outline" onClick={handleCoverLetter} disabled={coverLetterLoading || !job.jd_text}>
           {coverLetterLoading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <FileText className="h-4 w-4 mr-1.5" />}
-          {job.cover_letter ? "Regenerate Cover Letter" : "Generate Cover Letter"}
+          {job.cover_letter ? "Regenerate CL" : "Generate Cover Letter"}
         </Button>
+        {job.cover_letter && (
+          <Button
+            variant="outline"
+            onClick={() => window.open(`${API_BASE}/api/jobs/${id}/cover-letter-pdf`, "_blank")}
+          >
+            <Eye className="h-4 w-4 mr-1.5" />
+            CL PDF
+          </Button>
+        )}
         {tailored && (
           <Button
             className="bg-green-600 hover:bg-green-700"

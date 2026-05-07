@@ -20,8 +20,9 @@ def migrate_db():
     with engine.connect() as conn:
         existing = {row[1] for row in conn.execute(__import__("sqlalchemy").text("PRAGMA table_info(job)"))}
         for col, ddl in [
-            ("match_score",  "ALTER TABLE job ADD COLUMN match_score INTEGER"),
-            ("match_reason", "ALTER TABLE job ADD COLUMN match_reason TEXT"),
+            ("match_score",       "ALTER TABLE job ADD COLUMN match_score INTEGER"),
+            ("match_reason",      "ALTER TABLE job ADD COLUMN match_reason TEXT"),
+            ("cover_letter_path", "ALTER TABLE job ADD COLUMN cover_letter_path TEXT"),
         ]:
             if col not in existing:
                 conn.execute(__import__("sqlalchemy").text(ddl))

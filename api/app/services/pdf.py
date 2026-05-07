@@ -68,3 +68,28 @@ async def generate_pdf(
     HTML(string=html_content, base_url=str(template_dir)).write_pdf(str(output_path))
 
     return output_path
+
+
+async def generate_cover_letter_pdf(cover_letter: str, candidate_name: str, job_id: int) -> Path:
+    """Render cover letter text as a clean PDF."""
+    import html as html_lib
+    body = html_lib.escape(cover_letter).replace("\n", "<br>")
+    html_content = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  body {{ font-family: Georgia, serif; font-size: 11pt; line-height: 1.7;
+         margin: 2.5cm 2.8cm; color: #1a1a1a; }}
+  .name {{ font-size: 14pt; font-weight: bold; margin-bottom: 0.2cm; }}
+  .date {{ color: #555; font-size: 10pt; margin-bottom: 1cm; }}
+  .body {{ white-space: pre-wrap; }}
+</style></head>
+<body>
+  <div class="name">{html_lib.escape(candidate_name)}</div>
+  <div class="date">{__import__('datetime').date.today().strftime('%B %d, %Y')}</div>
+  <div class="body">{body}</div>
+</body></html>"""
+
+    filename = f"cover_letter_{job_id}.pdf"
+    output_path = OUTPUT_DIR / filename
+    HTML(string=html_content).write_pdf(str(output_path))
+    return output_path

@@ -271,10 +271,33 @@ async def tailor_cover_letter(job_id: int, session: Session = Depends(get_sessio
         raise HTTPException(status_code=404, detail=str(e))
     cover_letter = await claude_service.generate_cover_letter(skill_md, job.jd_text, job.company)
     job.cover_letter = cover_letter
+
+    # Generate PDF
+    candidate_name = json.loads(job.tailored_data).get("personal", {}).get("name", "") if job.tailored_data else ""
+    cl_pdf_path = await pdf_service.generate_cover_letter_pdf(cover_letter, candidate_name, job_id)
+    job.cover_letter_path = str(cl_pdf_path)
+
     session.add(job)
     session.commit()
     session.refresh(job)
-    return {"cover_letter": cover_letter}
+    return {"cover_letter": cover_letter, "cover_letter_path": str(cl_pdf_path)}
+
+
+@router.get("/{job_id}/cover-letter-pdf")
+def get_cover_letter_pdf(job_id: int, session: Session = Depends(get_session)):
+    job = session.get(Job, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.cover_letter_path:
+        raise HTTPException(status_code=404, detail="No cover letter PDF generated yet")
+    path = Path(job.cover_letter_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"PDF file not found at {path}")
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="cover_letter_{job_id}.pdf"'},
+    )
 
 
 @router.get("/{job_id}/tailored-data")
