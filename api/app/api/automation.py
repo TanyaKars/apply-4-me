@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -17,7 +18,6 @@ router = APIRouter()
 # In-process scrape state — tracks active scrape subprocesses per platform
 _scrape_proc: subprocess.Popen | None = None
 _builtin_scrape_proc: subprocess.Popen | None = None
-
 
 _LOCATIONS = [
     {"name": "United States",  "geo_id": "103644278"},
@@ -95,7 +95,6 @@ SESSION_LIFETIME_HOURS = 3  # LinkedIn sessions last ~2-3 hours in practice
 
 @router.get("/session-status")
 async def session_status():
-    import time
     cookie_file = Path.home() / ".apply4me" / "linkedin_cookies.json"
     if not cookie_file.exists():
         return {"has_session": False, "expired": False, "expires_at": None}
@@ -172,9 +171,19 @@ async def save_config(payload: dict):
 
 @router.get("/builtin/session-status")
 async def builtin_session_status():
-    """Check whether Builtin cookies have been saved."""
-    cookie_file = Path.home() / ".apply4me" / "builtin_cookies.json"
-    return {"has_session": cookie_file.exists()}
+    """Check whether Builtin has a valid session (user_session_id in localStorage)."""
+    storage_file = Path.home() / ".apply4me" / "builtin_storage_state.json"
+    if not storage_file.exists():
+        return {"has_session": False}
+    try:
+        state = json.loads(storage_file.read_text())
+        for origin in state.get("origins", []):
+            for entry in origin.get("localStorage", []):
+                if entry.get("name") == "user_session_id" and entry.get("value"):
+                    return {"has_session": True}
+        return {"has_session": False}
+    except Exception:
+        return {"has_session": False}
 
 
 @router.post("/builtin/setup-session")

@@ -16,8 +16,8 @@ STORAGE_STATE_FILE = Path.home() / ".apply4me" / "builtin_storage_state.json"
 
 
 async def setup_session():
-    """Open browser, let user log in manually, save cookies + localStorage when they close it."""
-    print("Opening Builtin. Log in, then close the browser window.")
+    """Open browser, let user log in manually. Saves storage state and closes once authenticated."""
+    print("Opening Builtin in browser. Please log in.")
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=False, slow_mo=50)
@@ -25,22 +25,19 @@ async def setup_session():
         page = await context.new_page()
         await page.goto("https://builtin.com/login")
 
-        # Save full storage state (cookies + localStorage) every 3s while browser is open.
-        # Loop exits when the user closes the browser window.
-        while browser.is_connected():
-            try:
-                COOKIE_FILE.parent.mkdir(parents=True, exist_ok=True)
-                # storage_state captures cookies AND localStorage — both needed for Builtin auth
-                await context.storage_state(path=str(STORAGE_STATE_FILE))
-                # Also save raw cookies for the httpx scraper
-                cookies = await context.cookies()
-                if cookies:
-                    COOKIE_FILE.write_text(json.dumps(cookies, indent=2))
-            except Exception:
-                break
-            await asyncio.sleep(3)
+        # Wait until the user menu header appears — always visible when authenticated
+        try:
+            await page.wait_for_selector(".header-dropdown-items", timeout=120_000)
+        except Exception:
+            pass  # user may have closed the browser
 
-        print(f"Session saved.")
+        # storage_state captures cookies + localStorage (where user_session_id lives)
+        COOKIE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        await context.storage_state(path=str(STORAGE_STATE_FILE))
+        cookies = await context.cookies()
+        COOKIE_FILE.write_text(json.dumps(cookies, indent=2))
+        print(f"Saved {len(cookies)} cookies + localStorage to {STORAGE_STATE_FILE}")
+        await browser.close()
 
 
 def load_cookies() -> list[dict]:
