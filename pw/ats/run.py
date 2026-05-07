@@ -92,6 +92,7 @@ async def apply_to_job(job_id: int):
                         print(f"Job {job_id} moved to pending — account creation required.")
         finally:
             await browser.close()
+            _kill_stale_playwright_browsers()
 
 
 if __name__ == "__main__":

@@ -26,6 +26,26 @@ argument-hint: "[what to update]"
 
 ---
 
+## Diversity / EEO
+
+> Used for voluntary EEO surveys on job applications. Fill in your honest answers.
+
+- **Gender:**
+- **Race / Ethnicity:**
+- **Veteran status:**
+- **Disability status:**
+
+---
+
+## Work Authorization & Salary
+
+- **Authorized to work in the US:** Yes
+- **Requires visa sponsorship:** No
+- **US Citizen:** Yes
+- **Salary expectation:** 
+
+---
+
 ## Tailoring Preferences
 
 <!-- ✅ SAFE TO EDIT — these are your personal writing style preferences -->

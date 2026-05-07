@@ -35,17 +35,34 @@ def _read_nav_skill() -> str:
     return ""
 
 
-def _read_personal_urls() -> dict:
-    """Extract Portfolio URL and Other website from resume SKILL.md."""
+def _read_resume_skill() -> dict:
+    """Extract structured fields from resume SKILL.md (URLs, diversity data)."""
     resume_path = Path(__file__).parents[2] / ".claude" / "skills" / "resume" / "SKILL.md"
-    result = {"portfolio_url": "", "other_website": ""}
+    result = {
+        "github": "", "portfolio_url": "", "other_website": "",
+        "gender": "", "race": "", "veteran_status": "", "disability_status": "",
+        "authorized_to_work_us": "", "requires_sponsorship": "",
+        "us_citizen": "", "salary_expectation": "",
+    }
     if not resume_path.exists():
         return result
+    field_map = {
+        "- **GitHub:**": "github",
+        "- **Portfolio URL:**": "portfolio_url",
+        "- **Other website:**": "other_website",
+        "- **Gender:**": "gender",
+        "- **Race / Ethnicity:**": "race",
+        "- **Veteran status:**": "veteran_status",
+        "- **Disability status:**": "disability_status",
+        "- **Authorized to work in the US:**": "authorized_to_work_us",
+        "- **Requires visa sponsorship:**": "requires_sponsorship",
+        "- **US Citizen:**": "us_citizen",
+        "- **Salary expectation:**": "salary_expectation",
+    }
     for line in resume_path.read_text().splitlines():
-        if line.startswith("- **Portfolio URL:**"):
-            result["portfolio_url"] = line.split(":", 1)[-1].strip().lstrip("*").strip()
-        elif line.startswith("- **Other website:**"):
-            result["other_website"] = line.split(":", 1)[-1].strip().lstrip("*").strip()
+        for prefix, key in field_map.items():
+            if line.startswith(prefix):
+                result[key] = line.split(":", 1)[-1].strip().lstrip("*").strip()
     return result
 
 
@@ -73,7 +90,16 @@ _EXTRACT_FIELDS_JS = """() => {
         // 4. ancestor label element
         const parentLabel = el.closest('label');
         if (parentLabel) return parentLabel.innerText.trim();
-        // 5. Walk up DOM up to 7 levels — check preceding siblings and label-like children
+        // 5. Ashby / fieldset: look for question-title label in ancestor fieldset
+        const fieldset = el.closest('fieldset');
+        if (fieldset) {
+            const qt = fieldset.querySelector('[class*="question-title"], legend');
+            if (qt) {
+                const text = (qt.innerText || '').trim();
+                if (text) return text;
+            }
+        }
+        // 6. Walk up DOM up to 7 levels — check preceding siblings and label-like children
         let node = el;
         for (let depth = 0; depth < 7; depth++) {
             let prev = node.previousElementSibling;
@@ -87,7 +113,7 @@ _EXTRACT_FIELDS_JS = """() => {
             const parent = node.parentElement;
             if (!parent || parent === document.body) break;
             const lblChild = parent.querySelector(
-                'label, [class*="label"], [class*="Label"], [class*="question-text"], legend, dt'
+                '[class*="question-title"], label, [class*="label"], [class*="Label"], [class*="question-text"], legend, dt'
             );
             if (lblChild && !lblChild.contains(el)) {
                 const text = (lblChild.innerText || '').trim();
@@ -111,6 +137,7 @@ _EXTRACT_FIELDS_JS = """() => {
         fields.push({
             idx: idx++, type: 'text',
             name: el.name || '', id: el.id || '',
+            placeholder: el.placeholder || '',
             label: getLabel(el), value: el.value, required: el.required,
         });
     });
@@ -120,6 +147,7 @@ _EXTRACT_FIELDS_JS = """() => {
         fields.push({
             idx: idx++, type: 'textarea',
             name: el.name || '', id: el.id || '',
+            placeholder: el.placeholder || '',
             label: getLabel(el), value: el.value, required: el.required,
         });
     });
@@ -146,7 +174,10 @@ _EXTRACT_FIELDS_JS = """() => {
                 label: getLabel(el), options: [], selected: null,
             };
         }
-        const optLabel = el.value ||
+        // Prefer sibling label[for=id], then parent text, then value
+        const sibLbl = el.id ? document.querySelector(`label[for="${el.id}"]`) : null;
+        const optLabel = (sibLbl ? sibLbl.innerText.trim() : '') ||
+            el.value ||
             (el.parentElement ? el.parentElement.innerText.trim() : '') ||
             el.id || '';
         radioGroups[key].options.push(optLabel);
@@ -160,6 +191,40 @@ _EXTRACT_FIELDS_JS = """() => {
             idx: idx++, type: 'checkbox',
             name: el.name || '', id: el.id || '',
             label: getLabel(el), checked: el.checked,
+        });
+    });
+
+    // Detect button-group choices (e.g. Ashby Yes/No toggles, custom option buttons)
+    // Look for groups of sibling buttons inside a common container
+    const buttonGroupContainers = new Set();
+    document.querySelectorAll('button, [role="radio"], [role="button"]').forEach(btn => {
+        if (!isVisible(btn)) return;
+        const text = (btn.innerText || btn.getAttribute('aria-label') || '').trim();
+        if (!text || text.length > 40) return;
+        // Skip navigation/action buttons
+        if (/^(next|back|continue|submit|apply|upload|remove|cancel|save|sign|log)/i.test(text)) return;
+        const parent = btn.parentElement;
+        if (!parent || buttonGroupContainers.has(parent)) return;
+        // Check if siblings are also short-text buttons (i.e. an option group)
+        const siblingBtns = Array.from(parent.querySelectorAll('button, [role="radio"], [role="button"]'))
+            .filter(b => isVisible(b) && b !== btn);
+        if (siblingBtns.length < 1 || siblingBtns.length > 8) return;
+        const allShort = siblingBtns.every(b => (b.innerText || '').trim().length < 50);
+        if (!allShort) return;
+        buttonGroupContainers.add(parent);
+        const options = [btn, ...siblingBtns].map(b => (b.innerText || b.getAttribute('aria-label') || '').trim()).filter(Boolean);
+        const selected = [btn, ...siblingBtns].find(b =>
+            b.getAttribute('aria-pressed') === 'true' ||
+            b.getAttribute('aria-checked') === 'true' ||
+            b.classList.contains('selected') || b.classList.contains('active') ||
+            b.getAttribute('data-selected') === 'true'
+        );
+        fields.push({
+            idx: idx++, type: 'button_group',
+            name: '', id: '',
+            label: getLabel(parent) || getLabel(btn),
+            options: [...new Set(options)],
+            selected: selected ? (selected.innerText || '').trim() : null,
         });
     });
 
@@ -200,7 +265,7 @@ class AIFillerAdapter(BaseATSAdapter):
         self.jd_text = jd_text
         self.job_id = job_id
         self._nav_skill = _read_nav_skill()
-        self._personal_urls = _read_personal_urls()
+        self._personal_urls = _read_resume_skill()
         self.stop_reason: str = ""
 
     async def _click_linkedin_apply(self) -> bool:
@@ -296,25 +361,9 @@ class AIFillerAdapter(BaseATSAdapter):
 
             if action == "submit":
                 await self._upload_resume_if_needed()
-                try:
-                    submit = self.page.locator(
-                        "button[type='submit'], input[type='submit'], "
-                        "button:has-text('Submit'), button:has-text('SUBMIT'), "
-                        "button:has-text('Send application'), button:has-text('Send Application')"
-                    ).first
-                    if await submit.is_visible(timeout=2000):
-                        print("  Submitting — pausing for review.")
-                        await self.pause_before_submit()
-                        await submit.click()
-                        await self.page.wait_for_timeout(3000)
-                        return True
-                except Exception:
-                    pass
-                print("  Submit button not found.")
-                inp = input("  Press ENTER to retry or 'q' to quit: ").strip().lower()
-                if inp == "q":
-                    return False
-                continue
+                print("\n  ✅ Form filled — review in browser, then click Submit when ready.")
+                print("     (Close the window to cancel)\n")
+                return await self._wait_for_user_submit()
 
             if action == "click":
                 text = decision.get("text", "")
@@ -340,6 +389,29 @@ class AIFillerAdapter(BaseATSAdapter):
                 return False
             await self.page.wait_for_timeout(2000)
 
+        return False
+
+    async def _wait_for_user_submit(self) -> bool:
+        """Poll until user manually submits the form (confirmation page) or closes the browser."""
+        import asyncio
+        CONFIRMATION_KEYWORDS = [
+            "thank you for applying", "application submitted", "application received",
+            "successfully applied", "we received your application", "your application has been",
+            "application complete", "you've applied", "you have applied",
+        ]
+        deadline = asyncio.get_event_loop().time() + 900  # 15-minute cap
+        while asyncio.get_event_loop().time() < deadline:
+            try:
+                text = await self.page.evaluate("() => document.body.innerText.substring(0, 800).toLowerCase()")
+                if any(kw in text for kw in CONFIRMATION_KEYWORDS):
+                    print("  Confirmation page detected — application submitted!")
+                    return True
+            except Exception:
+                # Page or browser was closed by the user
+                print("  Browser closed — exiting.")
+                return False
+            await asyncio.sleep(2)
+        print("  15-minute timeout reached without confirmation.")
         return False
 
     async def _decide_action(self, page_state: dict, has_form: bool, last_action: str = "") -> dict:
@@ -461,7 +533,7 @@ What is the single best next action? Return JSON only:
         slim = []
         for f in fields:
             item = {"idx": f["idx"], "type": f["type"], "label": f.get("label", "")}
-            if f["type"] in ("select", "radio"):
+            if f["type"] in ("select", "radio", "button_group"):
                 item["options"] = f.get("options", [])
             if f.get("required"):
                 item["required"] = True
@@ -469,34 +541,31 @@ What is the single best next action? Return JSON only:
 
         jd_section = f"\n\nJOB DESCRIPTION:\n{self.jd_text}" if self.jd_text else ""
 
-        portfolio = self._personal_urls.get("portfolio_url", "")
-        other_site = self._personal_urls.get("other_website", "")
-        website_rule = ""
-        if portfolio or other_site:
-            urls = " / ".join(u for u in [portfolio, other_site] if u)
-            website_rule = f"- Portfolio / personal website / other projects / side projects URL → use: {urls}\n"
+        url_keys = {"github", "portfolio_url", "other_website"}
+        eeo_keys = {"gender", "race", "veteran_status", "disability_status"}
+        auth_keys = {"authorized_to_work_us", "requires_sponsorship", "us_citizen", "salary_expectation"}
+        url_data = "\n".join(f"- {k}: {v}" for k, v in self._personal_urls.items() if k in url_keys and v)
+        eeo_data = "\n".join(f"- {k}: {v}" for k, v in self._personal_urls.items() if k in eeo_keys and v)
+        auth_data = "\n".join(f"- {k}: {v}" for k, v in self._personal_urls.items() if k in auth_keys and v)
 
         prompt = f"""You are filling out a job application form on behalf of the candidate.
 
+INSTRUCTIONS:
+{self._nav_skill}
+
 CANDIDATE DATA:
 {json.dumps(self.resume, indent=2)}
+
+CANDIDATE URLs (use these for website/portfolio/github fields):
+{url_data}
+{"CANDIDATE DIVERSITY / EEO ANSWERS:" + chr(10) + eeo_data if eeo_data else ""}
+{"CANDIDATE WORK AUTHORIZATION & SALARY:" + chr(10) + auth_data if auth_data else ""}
 {jd_section}
 
 FORM FIELDS (current step):
 {json.dumps(slim, indent=2)}
 
-Rules:
-- Fill each field from the candidate data above
-- Work authorization in the US → "Yes"
-- Requires visa sponsorship → "No"
-- Salary / compensation → leave empty (return "")
-- Years of experience → calculate from resume dates
-- Cover letter / "why this company" text → 2-3 sentences from the summary tailored to the role
-{website_rule}- For select/radio: return the exact option text that best matches; if none fit, return ""
-- For checkbox: return "true" to check, "false" to leave unchecked
-- Return "" for anything you cannot answer from the data
-
-Return ONLY a JSON array, no explanation:
+Return ONLY a JSON array mapping each field index to its value, no explanation:
 [{{"idx": 0, "value": "..."}}]"""
 
         message = client.messages.create(
@@ -528,8 +597,14 @@ Return ONLY a JSON array, no explanation:
             name = field.get("name", "")
             label = field.get("label", "")
 
-            sel = f'[id="{fid}"]' if fid else (f"[name='{name}']" if name else None)
-            if not sel:
+            placeholder = field.get("placeholder", "")
+            if fid:
+                sel = f'[id="{fid}"]'
+            elif name:
+                sel = f"[name='{name}']"
+            elif placeholder:
+                sel = f'[placeholder="{placeholder}"]'
+            else:
                 print(f"  Skipping field idx={idx} ({label!r}) — no selector")
                 continue
 
@@ -567,6 +642,23 @@ Return ONLY a JSON array, no explanation:
                     if await radio.is_visible(timeout=1000):
                         await radio.click()
                         print(f"  Radio {label!r}: {value}")
+
+                elif ftype == "button_group":
+                    # Find and click the matching button within the group's parent container
+                    options = field.get("options", [])
+                    match = next((o for o in options if o.lower() == value.lower()), None)
+                    if not match:
+                        match = next((o for o in options if value.lower() in o.lower()), None)
+                    if match:
+                        btn = self.page.get_by_role("button", name=match, exact=True).first
+                        if not await btn.count():
+                            btn = self.page.locator(f'button:has-text("{match}"), [role="radio"]:has-text("{match}")').first
+                        try:
+                            await btn.click(timeout=2000)
+                            print(f"  Button group {label!r}: {match}")
+                        except Exception as e:
+                            print(f"  Could not click button {match!r}: {e}")
+                    continue
 
                 elif ftype == "checkbox":
                     want_checked = value.lower() == "true"

@@ -1,13 +1,13 @@
 ---
 name: apply
-description: Navigation instructions for the AI-driven job application filler. Edit to control how Claude navigates unknown application pages, account walls, login prompts, and multi-step forms.
+description: Instructions for the AI-driven job application filler — navigation AND form filling. Edit to control how Claude navigates pages and fills form fields.
 argument-hint: "[what to update]"
 ---
 
-# Application Navigation Instructions
+# Application Instructions
 
-> apply4me reads this file at every step of the browser automation.
-> Edit it in plain English — Claude follows these instructions to navigate unknown pages.
+> apply4me reads this file at every step of the browser automation — for both navigation decisions and form filling.
+> Edit it in plain English — Claude follows these instructions exactly.
 
 ---
 
@@ -51,25 +51,19 @@ At each step you see the current page state and decide what single action to tak
 
 - If the page requires logging into a third-party service (Google, Microsoft, etc.) → stop with reason "login required"
 - LinkedIn login is handled separately — do not stop for LinkedIn
+- Builtin login is handled separately — do not stop for built-in login walls
 
 ---
 
 ## Already Applied
 
-- If the page says "You have already applied" or similar → stop with reason "already applied"
+- If the page says "You have already applied" or similar → stop with reason "already applied" and move job to the "Applied" category
 
 ---
 
 ## List of Open Positions
 
 - If the page shows a list of jobs (not the form for the specific job) → find the job title that best matches the one being applied to and click it
-
----
-
-## Diversity / EEO / Voluntary Surveys
-
-- These are usually optional — answer "Prefer not to say" / "Decline to self-identify" for each question
-- Do not leave required diversity fields blank — pick the most neutral option
 
 ---
 
@@ -82,3 +76,57 @@ At each step you see the current page state and decide what single action to tak
 ## Confirmation / Thank You Page
 
 - If you see "Thank you for applying", "Application submitted", "We received your application" or similar → you are done
+
+---
+
+## Form Filling Rules
+
+When asked to fill a form, use the candidate data provided. Follow these rules:
+
+### Identity fields
+- Name, full name → candidate's full name
+- Email → candidate's email
+- Phone → candidate's phone
+
+### URL fields
+- Field labeled "GitHub" or mentioning "github" → use GitHub URL
+- Field labeled "LinkedIn" or mentioning "linkedin" → use LinkedIn URL
+- Field labeled "Portfolio" → use portfolio URL if set, otherwise other website
+- Field labeled "Website", "Personal website", "Other website" → use other website URL
+- Field combining multiple like "Website, Portfolio, Github..." → prefer GitHub URL
+
+### Work authorization
+- Use the candidate's answers from the `Work Authorization & Salary` section of their resume data
+
+### Salary
+- Use the candidate's salary expectation from their resume data (if empty → leave the field blank)
+
+### Experience
+- "Years of experience" → calculate from resume dates (working since 2018, ~7+ years)
+
+### Cover letter / open-ended text
+- "Why this company" / "why do you want to work here" / "tell us about yourself" → write 2–3 sentences from the candidate's summary tailored to the role
+
+### Diversity / EEO
+- Use the candidate's actual answers from CANDIDATE DIVERSITY / EEO ANSWERS
+- If a field has no answer set → use "Prefer not to say" / "Decline to self-identify"
+- Never leave required diversity fields blank — pick the most neutral option available
+
+### Selects and radio buttons
+- Return the exact option text that best matches the correct answer
+- If no option fits, return ""
+
+### Checkboxes
+- Return "true" to check, "false" to leave unchecked
+- "I agree to terms" / consent checkboxes → "true"
+
+### Resume upload
+- Handled automatically — the tailored PDF is uploaded to any resume file input after form filling
+- You do not need to interact with file upload fields
+
+### Cover letter
+- File upload: detected and uploaded automatically — you do not need to interact with it
+- Text field ("Why this company", "why do you want to work here", "tell us about yourself", "cover letter") → write 2–3 sentences from the candidate's summary tailored to the role
+
+### Unknown fields
+- If you cannot determine the correct answer from candidate data → return ""
