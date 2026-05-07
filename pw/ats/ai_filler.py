@@ -35,6 +35,20 @@ def _read_nav_skill() -> str:
     return ""
 
 
+def _read_personal_urls() -> dict:
+    """Extract Portfolio URL and Other website from resume SKILL.md."""
+    resume_path = Path(__file__).parents[2] / ".claude" / "skills" / "resume" / "SKILL.md"
+    result = {"portfolio_url": "", "other_website": ""}
+    if not resume_path.exists():
+        return result
+    for line in resume_path.read_text().splitlines():
+        if line.startswith("- **Portfolio URL:**"):
+            result["portfolio_url"] = line.split(":", 1)[-1].strip().lstrip("*").strip()
+        elif line.startswith("- **Other website:**"):
+            result["other_website"] = line.split(":", 1)[-1].strip().lstrip("*").strip()
+    return result
+
+
 # JS: extract visible, fillable form fields
 _EXTRACT_FIELDS_JS = """() => {
     const fields = [];
@@ -186,6 +200,7 @@ class AIFillerAdapter(BaseATSAdapter):
         self.jd_text = jd_text
         self.job_id = job_id
         self._nav_skill = _read_nav_skill()
+        self._personal_urls = _read_personal_urls()
         self.stop_reason: str = ""
 
     async def _click_linkedin_apply(self) -> bool:
@@ -454,6 +469,13 @@ What is the single best next action? Return JSON only:
 
         jd_section = f"\n\nJOB DESCRIPTION:\n{self.jd_text}" if self.jd_text else ""
 
+        portfolio = self._personal_urls.get("portfolio_url", "")
+        other_site = self._personal_urls.get("other_website", "")
+        website_rule = ""
+        if portfolio or other_site:
+            urls = " / ".join(u for u in [portfolio, other_site] if u)
+            website_rule = f"- Portfolio / personal website / other projects / side projects URL → use: {urls}\n"
+
         prompt = f"""You are filling out a job application form on behalf of the candidate.
 
 CANDIDATE DATA:
@@ -470,7 +492,7 @@ Rules:
 - Salary / compensation → leave empty (return "")
 - Years of experience → calculate from resume dates
 - Cover letter / "why this company" text → 2-3 sentences from the summary tailored to the role
-- For select/radio: return the exact option text that best matches; if none fit, return ""
+{website_rule}- For select/radio: return the exact option text that best matches; if none fit, return ""
 - For checkbox: return "true" to check, "false" to leave unchecked
 - Return "" for anything you cannot answer from the data
 
