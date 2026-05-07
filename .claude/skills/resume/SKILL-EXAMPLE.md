@@ -21,6 +21,8 @@ argument-hint: "[what to update]"
 - **Location:** San Francisco, CA (open to remote)
 - **LinkedIn:** linkedin.com/in/janedoe
 - **GitHub:** github.com/janedoe
+- **Portfolio URL:** portfolio.com/janedoe
+- **Other website:** other.com/janedoe
 
 ---
 

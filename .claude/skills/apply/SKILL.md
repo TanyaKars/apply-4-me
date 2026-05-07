@@ -23,7 +23,7 @@ At each step you see the current page state and decide what single action to tak
 1. If the page is a job description / landing page → find and click the Apply button
 2. If the page has a form with application fields → fill it out
 3. If there is a Next / Continue button → click it to advance to the next step
-4. If there is a Submit / Send Application button → submit the form
+4. If there is a Submit / Send Application / SUBMIT APPLICATION button → return `submit` action (NOT `click`)
 5. If the page confirms the application was received → you are done
 
 ---
@@ -33,7 +33,8 @@ At each step you see the current page state and decide what single action to tak
 - Prefer "Apply Now" or "Apply" over other variants
 - If there are multiple Apply buttons, click the most prominent / first one
 - Avoid buttons labeled "Easy Apply" on external company sites (those are LinkedIn-specific)
-- If the Apply button opens a new tab, follow it to the new tab
+- After clicking Apply, wait — a new browser tab may open with the actual form. Do NOT click Apply again.
+- If clicking Apply does NOT change the URL and no new tab opens, the form may be revealed below — return `fill_form` on the next step
 
 ---
 

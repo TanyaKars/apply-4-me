@@ -6,10 +6,14 @@ Form field filling uses the candidate's resume data from SKILL.md.
 """
 import json
 import os
+import tempfile
 from pathlib import Path
 
+import httpx
 from playwright.async_api import Page
 from pw.ats.base import BaseATSAdapter
+
+BACKEND_URL = "http://localhost:8000"
 
 
 def _get_api_key() -> str:
@@ -37,22 +41,45 @@ _EXTRACT_FIELDS_JS = """() => {
     let idx = 0;
 
     function getLabel(el) {
+        // 1. label[for]
         if (el.id) {
             const lbl = document.querySelector('label[for="' + el.id + '"]');
             if (lbl) return lbl.innerText.trim();
         }
-        const aria = el.getAttribute('aria-label') || el.getAttribute('aria-labelledby');
-        if (aria) {
-            const ref = document.getElementById(aria);
-            return ref ? ref.innerText.trim() : aria;
+        // 2. aria-label / aria-labelledby
+        const ariaLabel = el.getAttribute('aria-label');
+        if (ariaLabel) return ariaLabel;
+        const labelledBy = el.getAttribute('aria-labelledby');
+        if (labelledBy) {
+            const ref = document.getElementById(labelledBy);
+            if (ref) return ref.innerText.trim();
         }
+        // 3. placeholder
         if (el.placeholder) return el.placeholder;
-        const parent = el.closest('label');
-        if (parent) return parent.innerText.trim();
-        const group = el.closest('[class*="field"], [class*="form-group"], [class*="question"], [class*="Question"]');
-        if (group) {
-            const lbl = group.querySelector('label, [class*="label"], [class*="Label"]');
-            if (lbl) return lbl.innerText.trim();
+        // 4. ancestor label element
+        const parentLabel = el.closest('label');
+        if (parentLabel) return parentLabel.innerText.trim();
+        // 5. Walk up DOM up to 7 levels — check preceding siblings and label-like children
+        let node = el;
+        for (let depth = 0; depth < 7; depth++) {
+            let prev = node.previousElementSibling;
+            while (prev) {
+                if (!prev.querySelector('input, textarea, select, button')) {
+                    const text = (prev.innerText || '').trim();
+                    if (text && text.length > 3 && text.length < 500) return text;
+                }
+                prev = prev.previousElementSibling;
+            }
+            const parent = node.parentElement;
+            if (!parent || parent === document.body) break;
+            const lblChild = parent.querySelector(
+                'label, [class*="label"], [class*="Label"], [class*="question-text"], legend, dt'
+            );
+            if (lblChild && !lblChild.contains(el)) {
+                const text = (lblChild.innerText || '').trim();
+                if (text && text.length > 3 && text.length < 500) return text;
+            }
+            node = parent;
         }
         return el.name || el.id || '';
     }
@@ -154,9 +181,10 @@ _GET_PAGE_STATE_JS = """() => {
 class AIFillerAdapter(BaseATSAdapter):
     """General-purpose adapter that uses Claude to navigate and fill any application form."""
 
-    def __init__(self, page: Page, resume_data: dict, pdf_path: str, jd_text: str = ""):
+    def __init__(self, page: Page, resume_data: dict, pdf_path: str, jd_text: str = "", job_id: int | None = None):
         super().__init__(page, resume_data, pdf_path)
         self.jd_text = jd_text
+        self.job_id = job_id
         self._nav_skill = _read_nav_skill()
         self.stop_reason: str = ""
 
@@ -181,7 +209,7 @@ class AIFillerAdapter(BaseATSAdapter):
             return False
 
     async def fill_form(self, job_url: str) -> bool:
-        wait = "domcontentloaded" if "linkedin.com" in job_url else "networkidle"
+        wait = "domcontentloaded"
         await self.page.goto(job_url, wait_until=wait, timeout=30_000)
         await self.page.wait_for_timeout(2000)
 
@@ -202,6 +230,7 @@ class AIFillerAdapter(BaseATSAdapter):
                     ea = LinkedInEasyApplyAdapter(self.page, self.resume, self.pdf_path)
                     return await ea._fill_modal()
 
+        last_action = ""
         for step in range(20):
             print(f"\n--- AI Filler: step {step + 1} | url: {self.page.url} ---")
 
@@ -228,7 +257,7 @@ class AIFillerAdapter(BaseATSAdapter):
             has_form = bool(fillable) and not self._looks_like_utility_form(fillable)
 
             # Ask Claude what to do next
-            decision = await self._decide_action(page_state, has_form)
+            decision = await self._decide_action(page_state, has_form, last_action)
             action = decision.get("action", "")
             reason = decision.get("reason", "")
             print(f"  Claude → {action}" + (f": {reason}" if reason else ""))
@@ -246,6 +275,8 @@ class AIFillerAdapter(BaseATSAdapter):
                 instructions = await self._ask_claude_fill(fillable)
                 await self._apply_instructions(instructions, fillable)
                 await self._upload_resume_if_needed()
+                await self._handle_cover_letter()
+                last_action = "fill_form"
                 continue
 
             if action == "submit":
@@ -253,8 +284,8 @@ class AIFillerAdapter(BaseATSAdapter):
                 try:
                     submit = self.page.locator(
                         "button[type='submit'], input[type='submit'], "
-                        "button:has-text('Submit'), button:has-text('Send application'), "
-                        "button:has-text('Send Application')"
+                        "button:has-text('Submit'), button:has-text('SUBMIT'), "
+                        "button:has-text('Send application'), button:has-text('Send Application')"
                     ).first
                     if await submit.is_visible(timeout=2000):
                         print("  Submitting — pausing for review.")
@@ -272,6 +303,10 @@ class AIFillerAdapter(BaseATSAdapter):
 
             if action == "click":
                 text = decision.get("text", "")
+                # Route submit-like clicks through the submit handler
+                if any(kw in text.lower() for kw in ("submit", "send application")):
+                    action = "submit"
+                    continue
                 print(f"  Clicking: {text!r}")
                 clicked = await self._click_by_text(text)
                 if not clicked:
@@ -280,6 +315,7 @@ class AIFillerAdapter(BaseATSAdapter):
                     if inp == "q":
                         return False
                 await self.page.wait_for_timeout(2000)
+                last_action = f"click:{text}"
                 continue
 
             # Unexpected response — let user decide
@@ -291,7 +327,7 @@ class AIFillerAdapter(BaseATSAdapter):
 
         return False
 
-    async def _decide_action(self, page_state: dict, has_form: bool) -> dict:
+    async def _decide_action(self, page_state: dict, has_form: bool, last_action: str = "") -> dict:
         """Ask Claude what single action to take on the current page."""
         try:
             import anthropic
@@ -303,11 +339,17 @@ class AIFillerAdapter(BaseATSAdapter):
         client = anthropic.Anthropic(api_key=api_key)
         title = await self.page.title()
 
+        last_action_note = ""
+        if last_action == "fill_form":
+            last_action_note = "\nLAST ACTION: The form fields were just filled. Do NOT return fill_form again — look for a Next, Continue, or Submit button to advance.\n"
+        elif last_action.startswith("click:"):
+            last_action_note = f"\nLAST ACTION: Clicked '{last_action[6:]}'. The page may have updated.\n"
+
         prompt = f"""You are controlling a browser to submit a job application.
 
 NAVIGATION INSTRUCTIONS:
 {self._nav_skill}
-
+{last_action_note}
 CURRENT PAGE:
 URL: {self.page.url}
 Title: {title}
@@ -341,25 +383,33 @@ What is the single best next action? Return JSON only:
 
     async def _click_by_text(self, text: str) -> bool:
         """Find and click an element by its visible text, following new tabs."""
+        # Try role-based match (case-insensitive via exact=False fallback)
         for role in ("button", "link"):
-            el = self.page.get_by_role(role, name=text).first
-            try:
-                if await el.is_visible(timeout=500):
+            for exact in (True, False):
+                el = self.page.get_by_role(role, name=text, exact=exact).first
+                try:
+                    if not await el.is_visible(timeout=500):
+                        continue
+                    pages_before = list(self.page.context.pages)
                     url_before = self.page.url
-                    try:
-                        async with self.page.context.expect_page(timeout=2000) as new_page_info:
-                            await el.click()
-                        new_page = await new_page_info.value
-                        await new_page.wait_for_load_state("domcontentloaded", timeout=20_000)
-                        self.page = new_page
-                        print(f"  Opened new tab: {self.page.url}")
-                    except Exception:
-                        await self.page.wait_for_timeout(1500)
+                    await el.click()
+                    # Poll up to 8 seconds for a new tab or URL change
+                    for _ in range(16):
+                        await self.page.wait_for_timeout(500)
+                        pages_after = list(self.page.context.pages)
+                        new_pages = [p for p in pages_after if p not in pages_before]
+                        if new_pages:
+                            new_page = new_pages[-1]
+                            await new_page.wait_for_load_state("domcontentloaded", timeout=20_000)
+                            self.page = new_page
+                            print(f"  Opened new tab: {self.page.url}")
+                            return True
                         if self.page.url != url_before:
-                            await self.page.wait_for_load_state("networkidle", timeout=15_000)
+                            await self.page.wait_for_load_state("domcontentloaded", timeout=10_000)
+                            return True
                     return True
-            except Exception:
-                pass
+                except Exception:
+                    pass
         # Fallback: any visible element containing the text
         el = self.page.get_by_text(text, exact=False).first
         try:
@@ -498,27 +548,106 @@ Return ONLY a JSON array, no explanation:
 
                 elif ftype == "checkbox":
                     want_checked = value.lower() == "true"
-                    if await el.is_visible(timeout=2000):
+                    try:
                         currently = await el.is_checked()
-                        if want_checked != currently:
-                            await el.click()
-                        print(f"  Checkbox {label!r}: {value}")
+                    except Exception:
+                        currently = False
+                    if want_checked != currently:
+                        try:
+                            # Try label click first (works for custom-styled checkboxes)
+                            if fid:
+                                lbl = self.page.locator(f'label[for="{fid}"]').first
+                                if await lbl.count() > 0:
+                                    await lbl.click()
+                                else:
+                                    await el.click(force=True)
+                            else:
+                                await el.click(force=True)
+                        except Exception:
+                            pass
+                    print(f"  Checkbox {label!r}: {value}")
 
             except Exception as e:
                 print(f"  Could not fill {label!r} (idx={idx}): {e}")
 
     async def _upload_resume_if_needed(self):
-        """Upload resume PDF if a file input is present and visible."""
+        """Upload resume PDF to the resume file input (not cover letter)."""
         if not self.pdf_path:
             return
         try:
-            file_inputs = self.page.locator("input[type='file']")
-            count = await file_inputs.count()
+            # Try resume-specific input first (Greenhouse, Lever, etc.)
+            for sel in [
+                "input[type='file'][name*='resume']",
+                "input[type='file'][id*='resume']",
+                "input[type='file'][accept*='pdf']:not([name*='cover'])",
+            ]:
+                inp = self.page.locator(sel).first
+                if await inp.count() > 0:
+                    await inp.set_input_files(self.pdf_path)
+                    print(f"  Uploaded resume: {self.pdf_path}")
+                    return
+            # Fallback: first file input that isn't for cover letter
+            inputs = self.page.locator("input[type='file']")
+            count = await inputs.count()
             for i in range(count):
-                fi = file_inputs.nth(i)
-                if await fi.count() > 0:
-                    await fi.set_input_files(self.pdf_path)
-                    print(f"  Uploaded resume PDF: {self.pdf_path}")
-                    break
+                inp = inputs.nth(i)
+                name = await inp.get_attribute("name") or ""
+                if "cover" not in name.lower():
+                    await inp.set_input_files(self.pdf_path)
+                    print(f"  Uploaded resume (fallback): {self.pdf_path}")
+                    return
         except Exception as e:
             print(f"  Could not upload resume: {e}")
+
+    async def _handle_cover_letter(self):
+        """Detect cover letter upload field, generate CL via API, save to job, upload."""
+        # Find cover letter file input
+        cl_input = None
+        for sel in [
+            "input[type='file'][name*='cover_letter']",
+            "input[type='file'][name*='cover']",
+            "input[type='file'][id*='cover']",
+        ]:
+            inp = self.page.locator(sel).first
+            if await inp.count() > 0:
+                cl_input = inp
+                break
+
+        if cl_input is None:
+            # Check if page text mentions cover letter near a file input
+            has_cl_section = await self.page.evaluate("""() => {
+                const text = document.body.innerText.toLowerCase();
+                return text.includes('cover letter');
+            }""")
+            if not has_cl_section:
+                return
+            # Try the second file input (Greenhouse: resume=first, cover letter=second)
+            inputs = self.page.locator("input[type='file']")
+            if await inputs.count() >= 2:
+                cl_input = inputs.nth(1)
+
+        if cl_input is None or not self.job_id:
+            return
+
+        print("  Cover letter field detected — generating...")
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.post(f"{BACKEND_URL}/api/jobs/{self.job_id}/tailor-cover-letter")
+                if not resp.is_success:
+                    print(f"  Cover letter generation failed: {resp.status_code}")
+                    return
+                cover_letter_text = resp.json().get("cover_letter", "")
+
+            if not cover_letter_text:
+                return
+
+            # Write to temp file and upload
+            with tempfile.NamedTemporaryFile(suffix=".txt", mode="w", delete=False, encoding="utf-8") as f:
+                f.write(cover_letter_text)
+                tmp_path = f.name
+
+            await cl_input.set_input_files(tmp_path)
+            os.unlink(tmp_path)
+            print("  Cover letter generated and uploaded.")
+        except Exception as e:
+            print(f"  Cover letter handling failed: {e}")

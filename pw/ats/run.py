@@ -14,8 +14,9 @@ import httpx
 from playwright.async_api import async_playwright
 
 from pw.auth.session import load_cookies
-from pw.ats.detector import detect_ats, get_adapter
-from pw.ats.base import setup_overlay_dismissal
+from pw.auth.builtin_session import storage_state_path as builtin_storage_state_path
+from pw.ats.easy_apply import LinkedInEasyApplyAdapter
+from pw.ats.ai_filler import AIFillerAdapter
 
 
 def _kill_stale_playwright_browsers():
@@ -33,22 +34,14 @@ async def apply_to_job(job_id: int):
         resp.raise_for_status()
         job = resp.json()
 
-    # Use the stored ats_type — re-detecting from the URL fails for LinkedIn Easy Apply
-    # because linkedin.com URLs don't match any ATS pattern.
     ats_type = job.get("ats_type") or "unknown"
     ats_url = job.get("ats_url") or job.get("url")
-
-    # Fall back to URL-based detection only when stored type is unknown
-    if ats_type == "unknown" and ats_url:
-        ats_type = detect_ats(ats_url)
 
     print(f"ATS type: {ats_type}  URL: {ats_url}")
 
     if not ats_url:
         print("No ATS URL found for this job.")
         return
-
-    AdapterClass = get_adapter(ats_type)
 
     # Resume data is stored on the job itself after tailoring
     raw = job.get("tailored_data")
@@ -59,29 +52,28 @@ async def apply_to_job(job_id: int):
         print("No tailored PDF found. Generate one first via the UI.")
         return
 
-    cookies = load_cookies()
+    is_builtin = "builtin.com" in (ats_url or "")
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=False, slow_mo=100)
-        context = await browser.new_context()
-        # Add LinkedIn cookies in case needed for auth
-        await context.add_cookies(cookies)
-        page = await context.new_page()
-        await setup_overlay_dismissal(page)
-
-        # For easy_apply, always navigate to the job page itself, not any cached ats_url
-        apply_target = job.get("url") if ats_type == "easy_apply" else ats_url
-
-        if AdapterClass:
-            adapter = AdapterClass(page, resume_data, pdf_path)
+        if is_builtin and (builtin_state := builtin_storage_state_path()):
+            context = await browser.new_context(storage_state=builtin_state)
         else:
-            # Fall back to AI-guided filler for any unrecognised ATS
-            from pw.ats.ai_filler import AIFillerAdapter
-            print(f"No specific adapter for '{ats_type}' — using AI-guided form filler.")
+            cookies = load_cookies()
+            context = await browser.new_context()
+            await context.add_cookies(cookies)
+        page = await context.new_page()
+
+        if ats_type == "easy_apply":
+            adapter = LinkedInEasyApplyAdapter(page, resume_data, pdf_path)
+            apply_target = job.get("url")
+        else:
             adapter = AIFillerAdapter(
                 page, resume_data, pdf_path,
-                jd_text=job.get("jd_text", "")
+                jd_text=job.get("jd_text", ""),
+                job_id=job_id,
             )
+            apply_target = ats_url
 
         try:
             success = await adapter.fill_form(apply_target)
