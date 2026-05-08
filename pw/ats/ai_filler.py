@@ -346,6 +346,10 @@ class AIFillerAdapter(BaseATSAdapter):
                 return True
 
             if action == "stop":
+                # Before giving up, check if a form iframe was dynamically injected (e.g. Comeet SPA)
+                if await self._switch_to_form_iframe():
+                    last_action = ""
+                    continue
                 self.stop_reason = reason
                 print(f"  Cannot proceed: {reason}")
                 return False
@@ -390,6 +394,32 @@ class AIFillerAdapter(BaseATSAdapter):
             await self.page.wait_for_timeout(2000)
 
         return False
+
+    async def _switch_to_form_iframe(self) -> bool:
+        """Detect a form iframe dynamically injected by SPAs (e.g. Comeet) and navigate into it."""
+        SKIP = ["google", "recaptcha", "doubleclick", "analytics", "facebook",
+                "twitter", "linkedin", "youtube", "player", "widget", "ads",
+                "tracking", "beacon", "pixel", "chat", "intercom", "zendesk", "gstatic"]
+        try:
+            iframe_src = await self.page.evaluate(f"""() => {{
+                const skip = {json.dumps(SKIP)};
+                for (const fr of document.querySelectorAll('iframe')) {{
+                    const src = fr.src || '';
+                    if (!src || src.startsWith('about:') || src.startsWith('javascript:')) continue;
+                    if (skip.some(s => src.includes(s))) continue;
+                    return src;
+                }}
+                return null;
+            }}""")
+            if not iframe_src:
+                return False
+            print(f"  Found form iframe: {iframe_src} — navigating into it...")
+            await self.page.goto(iframe_src, wait_until="domcontentloaded", timeout=20_000)
+            await self.page.wait_for_timeout(1000)
+            return True
+        except Exception as e:
+            print(f"  iframe switch failed: {e}")
+            return False
 
     async def _wait_for_user_submit(self) -> bool:
         """Poll until user manually submits the form (confirmation page) or closes the browser."""

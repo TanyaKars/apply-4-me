@@ -55,7 +55,7 @@ RESUME_JSON_SCHEMA = """{
   "personal": {
     "name": "...", "email": "...", "phone": "...", "location": "...",
     "linkedin": "...", "github": "...", "photo_path": "",
-    "position": "exact job title from the JD"
+    "position": "TARGET job title from the JD — e.g. 'Software Developer in Test (SDET)'"
   },
   "summary": "2-3 sentence professional summary",
   "experience": [
@@ -72,7 +72,7 @@ RESUME_JSON_SCHEMA = """{
 }"""
 
 
-async def tailor_resume(skill_md: str, jd_text: str) -> dict:
+async def tailor_resume(skill_md: str, jd_text: str, job_title: str = "") -> dict:
     """Generate a tailored resume JSON from SKILL.md + job description."""
     client = anthropic.Anthropic(api_key=get_api_key())
     ats_rules = read_ats_rules()
@@ -82,8 +82,9 @@ async def tailor_resume(skill_md: str, jd_text: str) -> dict:
 {ats_rules}
 """ if ats_rules else ""
 
+    title_line = f"\nTARGET JOB TITLE (use exactly as-is for personal.position): {job_title}" if job_title else ""
     prompt = f"""You are an expert resume writer. Tailor the candidate's resume for the job description below.
-
+{title_line}
 --- CANDIDATE BACKGROUND & PREFERENCES (SKILL.md) ---
 {skill_md}
 
@@ -97,7 +98,7 @@ Rules:
 - The "title" field must contain ONLY the job title (e.g. "QA Lead") — never embed dates in the title
 - The "dates" field must contain ONLY the date range (e.g. "May 2019 – November 2021")
 - The "company" field must contain the FULL company string exactly as written in SKILL.md, including location and type (e.g. "PASV | United States (Part-time)")
-- Extract the exact job title from the JD and put it in personal.position
+- personal.position MUST be the TARGET job title exactly as written in the JD (e.g. the posting title "Software Developer in Test (SDET)" or "QA Product Engineer II") — NOT the candidate's current title from SKILL.md. Strip HTML entities and team suffixes after em/en dash.
 
 Return ONLY valid JSON matching this schema, no explanation:
 {RESUME_JSON_SCHEMA}"""

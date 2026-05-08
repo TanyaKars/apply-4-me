@@ -105,7 +105,7 @@ def _find_jobs_in_next_data(data: dict) -> list[dict]:
 
 def _parse_job_card(raw: dict) -> dict | None:
     """Normalize a raw Builtin job dict into our standard shape."""
-    title = raw.get("title") or raw.get("name") or ""
+    title = _clean_job_title(raw.get("title") or raw.get("name") or "")
     if not title:
         return None
 
@@ -172,6 +172,18 @@ def _html_to_text(raw: str) -> str:
     return "\n".join(result).strip()
 
 
+def _clean_job_title(title: str) -> str:
+    """Unescape HTML entities and strip product/team suffixes (e.g. '– ArcGIS Hub')."""
+    import html as htmllib
+    title = htmllib.unescape(title).strip()
+    # Strip Builtin-style team suffix after en/em dash: "QA Engineer II – ArcGIS Hub" → "QA Engineer II"
+    for sep in ("\u2013", "\u2014"):  # en dash, em dash
+        if f" {sep} " in title:
+            title = title[:title.index(f" {sep} ")].strip()
+            break
+    return title
+
+
 def _parse_listing_html(html: str) -> list[dict]:
     """Parse Builtin listing page (Alpine.js structure with job-card-{id} divs)."""
     jobs: list[dict] = []
@@ -196,7 +208,7 @@ def _parse_listing_html(html: str) -> list[dict]:
             continue
 
         href = title_m.group(1)
-        title = title_m.group(2).strip().strip('"').strip()
+        title = _clean_job_title(title_m.group(2).strip().strip('"').strip())
         url = f"https://builtin.com{href}"
         if url in seen:
             continue
@@ -359,6 +371,36 @@ def _extract_role_section(html: str) -> str:
     return ""
 
 
+def _extract_jsonld_description(html: str) -> str:
+    """Extract description from JSON-LD <script type="application/ld+json"> blocks.
+
+    Handles Builtin's structure where the + is HTML-encoded as &#x2B; and
+    the JobPosting node may be nested inside an @graph array.
+    """
+    import html as htmllib
+    for m in re.finditer(
+        r'<script[^>]+type="application/ld(?:\+|&#x2B;)json"[^>]*>(.*?)</script>',
+        html, re.DOTALL | re.IGNORECASE,
+    ):
+        try:
+            data = json.loads(htmllib.unescape(m.group(1)))
+        except json.JSONDecodeError:
+            continue
+        # Flatten: top-level list, single dict, or dict with @graph
+        candidates: list[dict] = []
+        if isinstance(data, list):
+            candidates = data
+        elif isinstance(data, dict):
+            candidates = data.get("@graph", []) or [data]
+        for item in candidates:
+            if not isinstance(item, dict):
+                continue
+            desc = item.get("description", "")
+            if desc and isinstance(desc, str) and len(desc) > 80:
+                return _html_to_text(desc)
+    return ""
+
+
 def _extract_jd_text(html: str) -> str:
     """Extract job description from a Builtin job detail page."""
     # 1. Try __NEXT_DATA__ — full content is often there even when UI truncates
@@ -371,12 +413,17 @@ def _extract_jd_text(html: str) -> str:
             if text and isinstance(text, str) and len(text) > 80:
                 return _html_to_text(text)
 
-    # 2. HTML: find "The Role" section specifically
+    # 2. JSON-LD structured data (JobPosting schema — some Builtin pages use this)
+    jsonld_text = _extract_jsonld_description(html)
+    if jsonld_text:
+        return jsonld_text
+
+    # 3. HTML: find "The Role" section specifically
     role_text = _extract_role_section(html)
     if role_text:
         return role_text
 
-    # 3. Generic HTML fallback
+    # 5. Generic HTML fallback
     for marker in ("job-description", "jobDescription", "description__content", "job-details"):
         idx = html.find(marker)
         if idx == -1:

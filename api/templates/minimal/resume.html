@@ -119,6 +119,9 @@
     {% endif %}
     <div>
       <div class="name">{{ resume.personal.name }}</div>
+      {% if resume.personal.position %}
+      <div style="font-size:10pt;color:#555;margin-top:2px;margin-bottom:4px;">{{ resume.personal.position }}</div>
+      {% endif %}
       <div class="contact">
         {% if resume.personal.email %}
         <a class="contact-icon" href="mailto:{{ resume.personal.email }}">

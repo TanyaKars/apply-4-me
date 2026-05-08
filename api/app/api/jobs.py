@@ -232,7 +232,7 @@ async def tailor_job(job_id: int, session: Session = Depends(get_session)):
         raise HTTPException(status_code=404, detail=str(e))
 
     # Tailor with Claude using SKILL.md as source of truth
-    tailored = await claude_service.tailor_resume(skill_md, job.jd_text)
+    tailored = await claude_service.tailor_resume(skill_md, job.jd_text, job_title=job.title)
     job.tailored_data = json.dumps(tailored)
 
     # Generate PDF
