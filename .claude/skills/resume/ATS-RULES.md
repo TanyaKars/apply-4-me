@@ -19,6 +19,13 @@
   - e.g. "Test-Driven Development (TDD)"
 - Do not use synonyms when the JD has a specific term — ATS matches exact strings
 
+## Structure Rules
+
+- If the candidate held multiple roles at the same company, output a SEPARATE experience entry for each role — same company string, different title and dates. Never merge roles into one title. The PDF renderer will group them visually under one company header automatically.
+- The "title" field: job title only — no dates embedded
+- The "dates" field: date range only (e.g. "May 2019 – November 2021")
+- The "company" field must contain the FULL company string exactly as written in SKILL.md, including location and employment type (e.g. "PASV | United States (Part-time)")
+
 ## Format Rules
 
 - Use standard section names: Summary, Experience, Skills, Education, Certifications

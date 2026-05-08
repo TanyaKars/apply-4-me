@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react"
 import { toast } from "sonner"
-import { FileDown, Upload, Loader2, RefreshCw, FileText } from "lucide-react"
+import { FileDown, Upload, Loader2, RefreshCw, FileText, Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -91,6 +91,10 @@ export default function ResumePage() {
           </Button>
           <Button size="sm" onClick={handleGeneratePdf} disabled={generating || !skillMd?.exists}>
             {generating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <FileDown className="h-4 w-4 mr-1.5" />}
+            Generate PDF
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => window.open("http://localhost:8000/api/resume/base-pdf", "_blank", "noopener,noreferrer")}>
+            <Eye className="h-4 w-4 mr-1.5" />
             Preview PDF
           </Button>
         </div>

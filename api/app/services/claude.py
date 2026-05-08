@@ -91,14 +91,9 @@ async def tailor_resume(skill_md: str, jd_text: str, job_title: str = "") -> dic
 --- JOB DESCRIPTION ---
 {jd_text}
 {ats_section}
-Rules:
-- Follow every preference stated in SKILL.md exactly — tone, bullet count, word choices, what to avoid, everything
+Follow every preference stated in SKILL.md (Tailoring Preferences + Notes for Claude) and every rule in the ATS rules above.
 - Do NOT fabricate experience, skills, or companies not mentioned in SKILL.md
-- If the candidate held multiple roles at the same company, create a SEPARATE experience entry for each role — never combine with "/" or "and", never drop any role
-- The "title" field must contain ONLY the job title (e.g. "QA Lead") — never embed dates in the title
-- The "dates" field must contain ONLY the date range (e.g. "May 2019 – November 2021")
-- The "company" field must contain the FULL company string exactly as written in SKILL.md, including location and type (e.g. "PASV | United States (Part-time)")
-- personal.position MUST be the TARGET job title exactly as written in the JD (e.g. the posting title "Software Developer in Test (SDET)" or "QA Product Engineer II") — NOT the candidate's current title from SKILL.md. Strip HTML entities and team suffixes after em/en dash.
+- personal.position MUST be the TARGET job title exactly as written in the JD — NOT the candidate's current title from SKILL.md. Strip HTML entities and team suffixes after em/en dash (e.g. "QA Product Engineer II – ArcGIS Hub" → "QA Product Engineer II")
 
 Return ONLY valid JSON matching this schema, no explanation:
 {RESUME_JSON_SCHEMA}"""
@@ -116,20 +111,19 @@ async def generate_base_resume(skill_md: str) -> dict:
     """Generate a general (non-tailored) resume JSON from SKILL.md."""
     client = anthropic.Anthropic(api_key=get_api_key())
 
-    prompt = f"""You are an expert resume writer. Convert the candidate's background below \
-into a clean, professional resume.
+    ats_rules = read_ats_rules()
+    ats_section = f"""
+--- ATS OPTIMIZATION RULES (do not override) ---
+{ats_rules}
+""" if ats_rules else ""
+
+    prompt = f"""You are an expert resume writer. Generate a resume strictly from the candidate data below.
 
 --- CANDIDATE BACKGROUND & PREFERENCES (SKILL.md) ---
 {skill_md}
-
-Instructions:
-- Follow all formatting preferences stated in the document
-- Include all experience listed
-- Present skills in the order given
-- If the candidate held multiple roles at the same company, create a SEPARATE experience entry for each role — never combine with "/" or "and", never drop any role
-- The "title" field must contain ONLY the job title (e.g. "QA Lead") — never embed dates in the title
-- The "dates" field must contain ONLY the date range (e.g. "May 2019 – November 2021")
-- The "company" field must contain the FULL company string exactly as written in SKILL.md, including location and type (e.g. "PASV | United States (Part-time)")
+{ats_section}
+Follow every preference and rule stated in SKILL.md (Tailoring Preferences + Notes for Claude) and the ATS rules above.
+- Do NOT fabricate experience, skills, or companies not in SKILL.md
 
 Return ONLY valid JSON matching this schema, no explanation:
 {RESUME_JSON_SCHEMA}"""

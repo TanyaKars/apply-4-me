@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
 from app.db import get_session
@@ -110,6 +111,19 @@ async def generate_pdf(session: Session = Depends(get_session)):
         group_experience=settings.get("group_experience", False),
     )
     return {"pdf_path": str(pdf_path)}
+
+
+@router.get("/base-pdf")
+def get_base_pdf():
+    """Serve the already-generated base resume PDF inline."""
+    pdf_path = Path.home() / ".apply4me" / "resumes" / "resume.pdf"
+    if not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="No resume PDF yet — click Generate PDF first")
+    return FileResponse(
+        pdf_path,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'inline; filename="resume.pdf"'},
+    )
 
 
 @router.post("/upload-photo")
