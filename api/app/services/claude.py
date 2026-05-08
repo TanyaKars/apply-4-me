@@ -200,10 +200,28 @@ async def score_job(skill_md: str, jd_text: str, title: str) -> dict:
 Title: {title}
 {jd_text[:2000]}
 
+Scoring rules (apply strictly):
+
+DEALBREAKERS — cap score at 30 if any apply:
+- Job requires as primary language/framework a skill that the candidate explicitly marked as "can't code", "no actual exp", "not primary skill", rated 0, or "familiar" only — infer this from the skill notes in SKILL.md
+- Purely management role with no hands-on QA/automation work
+
+STRONG NEGATIVES — reduce score significantly:
+- Job requires a skill the candidate has limited experience with (low rating or "basic" note in SKILL.md) as a core requirement
+- Manual-only QA role
+- Requires 10+ years experience explicitly
+
+STRONG POSITIVES — boost score:
+- Cypress, Jest, Playwright, Supertest, TypeScript
+- API testing, e2e automation, CI/CD
+- Remote-friendly
+- Startup or scale-up environment
+
 Scoring guide:
-- 80-100: Strong match — most required skills/experience align
-- 50-79:  Partial match — some key requirements met
-- 0-49:   Weak match — significant skill or experience gaps
+- 80-100: Excellent — most required skills align, no dealbreakers
+- 60-79:  Good — solid match with minor gaps
+- 40-59:  Fair — some key requirements met but notable gaps
+- 0-39:   Low — weak match or dealbreaker present
 
 Return ONLY valid JSON, no explanation:
 {{"score": <integer 0-100>, "reason": "<one sentence, max 100 chars>"}}"""
