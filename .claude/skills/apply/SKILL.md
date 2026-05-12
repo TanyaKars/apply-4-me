@@ -99,7 +99,8 @@ When asked to fill a form, use the candidate data provided. Follow these rules:
 - Use the candidate's answers from the `Work Authorization & Salary` section of their resume data
 
 ### Salary
-- Use the candidate's salary expectation from their resume data (if empty → leave the field blank)
+- Annual salary fields → use the candidate's salary expectation from their resume data (if empty → leave blank)
+- Hourly rate fields → convert annual salary to hourly: $140,000 ÷ 2,080 = ~$67/hour. Enter "67" (or the nearest acceptable value if the field has a range or step constraint). Never enter years of experience as a salary figure.
 
 ### Experience
 - "Years of experience" → calculate from resume dates (working since 2018, ~7+ years)
