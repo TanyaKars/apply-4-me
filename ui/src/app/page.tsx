@@ -87,6 +87,7 @@ export default function HomePage() {
   const [builtinSession, setBuiltinSession]   = useState<{ has_session: boolean } | null>(null)
   const [clearing, setClearing] = useState(false)
   const [urlInput, setUrlInput] = useState("")
+  const [pastedJd, setPastedJd] = useState("")
   const [addingUrl, setAddingUrl] = useState(false)
 
   const loadJobs = useCallback(async () => {
@@ -199,12 +200,13 @@ export default function HomePage() {
     if (!url) return
     setAddingUrl(true)
     try {
-      const job = await api.jobs.fromUrl(url)
+      const job = await api.jobs.fromUrl(url, pastedJd.trim() || undefined)
       setJobs(prev => {
         if (prev.some(j => j.id === job.id)) return prev
         return [job, ...prev]
       })
       setUrlInput("")
+      setPastedJd("")
       toast.success(`Added: ${job.title} @ ${job.company}`)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to add job")
@@ -352,15 +354,24 @@ export default function HomePage() {
               disabled={addingUrl}
             />
           </div>
-          <Button size="sm" onClick={handleAddFromUrl} disabled={addingUrl || !urlInput.trim() || !!blockedDomain}>
+          <Button size="sm" onClick={handleAddFromUrl} disabled={addingUrl || !urlInput.trim() || (!!blockedDomain && !pastedJd.trim())}>
             {addingUrl ? <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> : null}
             {addingUrl ? "Adding..." : "Add Job"}
           </Button>
         </div>
         {blockedDomain && (
-          <p className="text-xs text-destructive pl-1">
-            {blockedDomain} blocks automated access — paste the job manually or use a different source.
-          </p>
+          <div className="flex flex-col gap-1.5">
+            <p className="text-xs text-destructive pl-1">
+              {blockedDomain} blocks automated access — paste the job description below.
+            </p>
+            <textarea
+              className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm resize-y placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              placeholder="Paste the full job description here..."
+              value={pastedJd}
+              onChange={e => setPastedJd(e.target.value)}
+              disabled={addingUrl}
+            />
+          </div>
         )}
       </div>
 

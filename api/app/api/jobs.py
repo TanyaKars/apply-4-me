@@ -83,6 +83,7 @@ _HTTPX_HEADERS = {
 
 class AddJobFromUrlRequest(BaseModel):
     url: str
+    text: Optional[str] = None  # pre-pasted JD text (skips fetch)
 
 
 @router.post("/from-url", response_model=Job)
@@ -91,21 +92,24 @@ async def add_job_from_url(
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ):
-    # 1. Dedup by URL — skip fetch only if JD already present
+    # 1. Dedup by URL — skip only if JD already present
     existing = session.exec(select(Job).where(Job.url == req.url)).first()
     if existing and existing.jd_text:
         return existing
 
-    # 2. Fetch page
-    try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
-            resp = await client.get(req.url, headers=_HTTPX_HEADERS)
-            resp.raise_for_status()
-            page_text = _html_to_text(resp.text)
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch URL: {e.response.status_code}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch URL: {e}")
+    # 2. Get page text — use pasted text if provided, otherwise fetch
+    if req.text and req.text.strip():
+        page_text = req.text.strip()
+    else:
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
+                resp = await client.get(req.url, headers=_HTTPX_HEADERS)
+                resp.raise_for_status()
+                page_text = _html_to_text(resp.text)
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(status_code=502, detail=f"Failed to fetch URL: {e.response.status_code}")
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Failed to fetch URL: {e}")
 
     # 3. Extract fields with Claude Haiku
     try:
