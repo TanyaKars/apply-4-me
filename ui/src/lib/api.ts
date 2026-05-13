@@ -99,6 +99,11 @@ export const api = {
     pend: (id: number) => request<Job>(`/api/jobs/${id}/pend`, { method: "POST" }),
     clearNew: () => request<{ deleted: number }>("/api/jobs/clear-new", { method: "DELETE" }),
     score: (id: number) => request<Job>(`/api/jobs/${id}/score`, { method: "POST" }),
+    fromUrl: (url: string) =>
+      request<Job>("/api/jobs/from-url", {
+        method: "POST",
+        body: JSON.stringify({ url }),
+      }),
   },
   resume: {
     settings: () => request<{ template: string; include_photo: boolean; photo_path: string; group_experience: boolean }>("/api/resume/settings"),

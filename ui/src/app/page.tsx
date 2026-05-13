@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, ReactNode } from "react"
 import { toast } from "sonner"
-import { RefreshCw, Search, Trash2 } from "lucide-react"
+import { Link, RefreshCw, Search, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -86,6 +86,8 @@ export default function HomePage() {
   const [linkedinSession, setLinkedinSession] = useState<{ has_session: boolean; expires_at: number | null } | null>(null)
   const [builtinSession, setBuiltinSession]   = useState<{ has_session: boolean } | null>(null)
   const [clearing, setClearing] = useState(false)
+  const [urlInput, setUrlInput] = useState("")
+  const [addingUrl, setAddingUrl] = useState(false)
 
   const loadJobs = useCallback(async () => {
     try {
@@ -192,6 +194,25 @@ export default function HomePage() {
     }
   }
 
+  async function handleAddFromUrl() {
+    const url = urlInput.trim()
+    if (!url) return
+    setAddingUrl(true)
+    try {
+      const job = await api.jobs.fromUrl(url)
+      setJobs(prev => {
+        if (prev.some(j => j.id === job.id)) return prev
+        return [job, ...prev]
+      })
+      setUrlInput("")
+      toast.success(`Added: ${job.title} @ ${job.company}`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to add job")
+    } finally {
+      setAddingUrl(false)
+    }
+  }
+
   function handleJobUpdate(updated: Job) {
     setJobs(prev => prev.map(j => j.id === updated.id ? updated : j))
   }
@@ -255,6 +276,12 @@ export default function HomePage() {
     { value: "skipped",  label: "Skipped",  count: counts.skipped },
   ]
 
+  const BLOCKED_DOMAINS = ["wellfound.com"]
+  const blockedDomain = (() => {
+    try { return BLOCKED_DOMAINS.find(d => new URL(urlInput.trim()).hostname.includes(d)) ?? null }
+    catch { return null }
+  })()
+
   const isAnyScraping = scrapingSource !== null
   const scrapeLabel = scrapingSource
     ? `Scraping ${scrapingSource[0].toUpperCase() + scrapingSource.slice(1)}...`
@@ -309,6 +336,32 @@ export default function HomePage() {
             {scrapeLabel}
           </Button>
         </div>
+      </div>
+
+      {/* Add job from URL */}
+      <div className="flex flex-col gap-1.5 mb-4">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Link className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Paste job URL to add (LinkedIn, Greenhouse, Lever, Workday...)"
+              className="pl-9"
+              value={urlInput}
+              onChange={e => setUrlInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && !blockedDomain && handleAddFromUrl()}
+              disabled={addingUrl}
+            />
+          </div>
+          <Button size="sm" onClick={handleAddFromUrl} disabled={addingUrl || !urlInput.trim() || !!blockedDomain}>
+            {addingUrl ? <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> : null}
+            {addingUrl ? "Adding..." : "Add Job"}
+          </Button>
+        </div>
+        {blockedDomain && (
+          <p className="text-xs text-destructive pl-1">
+            {blockedDomain} blocks automated access — paste the job manually or use a different source.
+          </p>
+        )}
       </div>
 
       {/* Filters */}

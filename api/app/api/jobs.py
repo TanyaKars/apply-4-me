@@ -1,9 +1,13 @@
 import json
+import re
 from datetime import datetime
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import List, Optional
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from sqlmodel import Session, select
 from app.db import get_session, engine
 from app.models import Job, JobCreate, JobUpdate, JobStatus
@@ -11,6 +15,38 @@ from app.services import claude as claude_service
 from app.services import pdf as pdf_service
 
 router = APIRouter()
+
+
+class _TextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self._parts: list[str] = []
+        self._skip = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script", "style", "noscript"):
+            self._skip = True
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style", "noscript"):
+            self._skip = False
+
+    def handle_data(self, data):
+        if not self._skip:
+            stripped = data.strip()
+            if stripped:
+                self._parts.append(stripped)
+
+    def get_text(self) -> str:
+        return "\n".join(self._parts)
+
+
+def _html_to_text(html: str) -> str:
+    parser = _TextExtractor()
+    parser.feed(html)
+    text = parser.get_text()
+    # Collapse excessive blank lines
+    return re.sub(r"\n{3,}", "\n\n", text)
 
 
 async def _score_jobs_bg(job_ids: list[int]) -> None:
@@ -32,6 +68,83 @@ async def _score_jobs_bg(job_ids: list[int]) -> None:
                 session.commit()
             except Exception as e:
                 print(f"[score] job {job_id} failed: {e}")
+
+
+_HTTPX_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+
+class AddJobFromUrlRequest(BaseModel):
+    url: str
+
+
+@router.post("/from-url", response_model=Job)
+async def add_job_from_url(
+    req: AddJobFromUrlRequest,
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_session),
+):
+    # 1. Dedup by URL — skip fetch only if JD already present
+    existing = session.exec(select(Job).where(Job.url == req.url)).first()
+    if existing and existing.jd_text:
+        return existing
+
+    # 2. Fetch page
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
+            resp = await client.get(req.url, headers=_HTTPX_HEADERS)
+            resp.raise_for_status()
+            page_text = _html_to_text(resp.text)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch URL: {e.response.status_code}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch URL: {e}")
+
+    # 3. Extract fields with Claude Haiku
+    try:
+        extracted = await claude_service.extract_job_from_url(page_text, req.url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse job: {e}")
+
+    title = extracted.get("title") or "Unknown Title"
+    company = extracted.get("company") or "Unknown Company"
+    location = extracted.get("location") or None
+    jd_text = extracted.get("jd_text") or None
+
+    # 4. Update existing or create new
+    if existing:
+        existing.title = title or existing.title
+        existing.company = company or existing.company
+        existing.location = location or existing.location
+        existing.jd_text = jd_text or existing.jd_text
+        session.add(existing)
+        session.commit()
+        session.refresh(existing)
+        job = existing
+    else:
+        job_in = JobCreate(
+            title=title,
+            company=company,
+            location=location,
+            url=req.url,
+            jd_text=jd_text,
+        )
+        job = Job(**job_in.model_dump())
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+
+    if job.jd_text:
+        background_tasks.add_task(_score_jobs_bg, [job.id])
+
+    return job
 
 
 @router.get("/", response_model=List[Job])

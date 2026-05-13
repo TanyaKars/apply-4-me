@@ -234,6 +234,36 @@ Return ONLY valid JSON, no explanation:
     return _parse_json_response(message.content[0].text)
 
 
+async def extract_job_from_url(page_text: str, url: str) -> dict:
+    """Use Claude Haiku to extract job fields from raw page text.
+    Returns: {"title": str, "company": str, "location": str, "jd_text": str}
+    """
+    client = anthropic.Anthropic(api_key=get_api_key())
+    prompt = f"""Extract the job posting details from the page text below.
+
+URL: {url}
+
+PAGE TEXT:
+{page_text[:8000]}
+
+Return ONLY valid JSON with these fields, no explanation:
+{{
+  "title": "<job title>",
+  "company": "<company name>",
+  "location": "<location or Remote>",
+  "jd_text": "<full job description text>"
+}}
+
+If a field cannot be determined, use an empty string."""
+
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=2048,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return _parse_json_response(message.content[0].text)
+
+
 async def generate_cover_letter(skill_md: str, jd_text: str, company: str) -> str:
     """Generate a cover letter from SKILL.md + job description."""
     client = anthropic.Anthropic(api_key=get_api_key())
