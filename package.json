@@ -1,6 +1,8 @@
 {
   "name": "apply4me",
   "version": "0.1.0",
+  "author": "Tatiana Karsova <83120590tk@gmail.com> (https://github.com/TanyaKars)",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run dev:api\" \"npm run dev:ui\"",

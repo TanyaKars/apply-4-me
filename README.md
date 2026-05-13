@@ -1,16 +1,30 @@
-# apply4me
+# 🤖 apply4me
 
-**Automate your job search — without giving your data to anyone.**
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/License-PolyForm_NC_1.0.0-blue)](https://polyformproject.org/licenses/noncommercial/1.0.0)
 
-apply4me finds jobs on LinkedIn, rewrites your resume to match each job description using AI, and fills out application forms for you. Everything runs on your own computer. No cloud. No subscriptions. No one sees your resume but you.
+Automate your job search — without giving your data to anyone.
 
-> Built for QA engineers and anyone tired of copy-pasting the same resume into 50 job applications.
+apply4me finds jobs on LinkedIn and Builtin, scores them against your background, tailors your resume for each role using Claude AI, and fills out application forms automatically. Everything runs on your own computer.
+
+Requires an [Anthropic API key](https://console.anthropic.com) — you pay per use (~$1–3 per 100 applications).
 
 ---
 
-## Quick start with Docker (recommended)
+## What it actually does
 
-If you have [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed, you don't need Node.js or Python.
+1. Scrapes LinkedIn and Builtin for jobs matching your keywords and filters
+2. Scores each job against your background with Claude AI (0–100 match score)
+3. Rewrites your resume bullets and summary to match the specific role
+4. Generates a tailored resume PDF — and optionally a cover letter
+5. Opens the application form and fills it in automatically, then pauses for your review
+
+Supported ATS: LinkedIn Easy Apply, Greenhouse, Lever, Ashby, Workday. For everything else, the AI form filler reads the page and figures it out.
+
+---
+
+## Quick start with Docker
+
+The easiest way. You only need [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 
 ```
 git clone https://github.com/TanyaKars/apply4me
@@ -18,228 +32,104 @@ cd apply4me
 ./start.sh
 ```
 
-`start.sh` creates a `.env` file on first run — open it, add your Anthropic API key, then run `./start.sh` again.
+On first run, `start.sh` creates a `.env` file. Add your Anthropic API key and run `./start.sh` again.
 
-Once running:
 - App → **http://localhost:3000**
-- Browser view (for LinkedIn login & application review) → **http://localhost:6080/vnc.html**
-
-To stop: `Ctrl + C`, then `docker compose down`.
+- Browser view (LinkedIn login, form review) → **http://localhost:6080/vnc.html**
 
 ---
 
-## What it does
+## Manual install
 
-1. **Finds jobs** — searches LinkedIn using your own account and pulls job listings matching your keywords
-2. **Tailors your resume** — sends the job description + your background to Claude AI, which rewrites your bullet points and summary to match the role
-3. **Generates a PDF** — produces a clean, formatted resume PDF ready to submit
-4. **Fills application forms** — opens the company's application page and types in your info automatically, then pauses so you can review before hitting Submit
+You'll need Node.js 18+, Python 3.10+, and `uv`.
 
----
+**Install uv:**
 
-## Before you start (manual install)
-
-You'll need to install a few free tools. This takes about 15–20 minutes and you only do it once.
-
----
-
-### Step 1 — Install Node.js
-
-Node.js is a tool that runs JavaScript programs (apply4me uses it for the visual interface).
-
-1. Go to **https://nodejs.org**
-2. Download the **LTS** version (the one labeled "Recommended for most users")
-3. Run the installer and click through — all defaults are fine
-
-**Check it worked:** Open Terminal (on Mac: press `Cmd + Space`, type "Terminal", press Enter) and type:
-```
-node --version
-```
-You should see something like `v20.11.0`. Any number starting with 18 or higher is fine.
-
----
-
-### Step 2 — Install Python
-
-Python is a programming language that the AI and automation parts of apply4me are written in.
-
-1. Go to **https://www.python.org/downloads**
-2. Download the latest version (the big yellow button)
-3. Run the installer
-   - **Important on Windows:** check the box that says **"Add Python to PATH"** before clicking Install
-
-**Check it worked:** In Terminal, type:
-```
-python3 --version
-```
-You should see something like `Python 3.12.0`.
-
----
-
-### Step 3 — Install uv
-
-`uv` is a tool that manages Python packages (think of it like an App Store for Python tools).
-
-**On Mac or Linux** — paste this into Terminal and press Enter:
-```
+```bash
+# Mac/Linux
 curl -LsSf https://astral.sh/uv/install.sh | sh
-```
 
-**On Windows** — paste this into PowerShell and press Enter:
-```
+# Windows (PowerShell)
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-Then close Terminal and open it again (this makes the new tool available).
+**Then:**
 
-**Check it worked:**
-```
-uv --version
-```
-
----
-
-### Step 4 — Get an Anthropic API key
-
-This is what lets apply4me use Claude AI to rewrite your resume. You need a paid Anthropic account (separate from Claude.ai — that's the chat product, this is the API).
-
-1. Go to **https://console.anthropic.com**
-2. Sign up or log in
-3. Go to **API Keys** in the left sidebar
-4. Click **Create Key**, give it a name like "apply4me", copy the key
-
-> **Cost:** Resume tailoring uses roughly $0.01–0.03 per job. 100 applications ≈ $1–3 total.
-
----
-
-## Installation
-
-Open Terminal, then run these commands one by one:
-
-```
+```bash
 git clone https://github.com/TanyaKars/apply4me
-```
-```
 cd apply4me
+cp .env.example .env   # add your Anthropic API key
+node scripts/setup.js  # installs everything, takes a few minutes
+npm run dev            # starts the app at http://localhost:3000
 ```
-```
-cp .env.example .env
-```
-
-Now open the `.env` file in any text editor (TextEdit on Mac, Notepad on Windows) and replace `sk-ant-your-key-here` with your real API key from Step 4.
-
-Then run the setup script:
-```
-node scripts/setup.js
-```
-
-This installs all dependencies automatically. It takes a few minutes.
 
 ---
 
-## Running the app
+## First-time setup
 
-Every time you want to use apply4me, open Terminal, go to the apply4me folder, and run:
+**1. Fill in your resume**
 
-```
-npm run dev
-```
+Open `apply4me/.claude/skills/resume/SKILL.md` and replace the example with your real info — name, contact details, work history, skills, and what kind of role you're targeting. More detail = better tailoring.
 
-Then open your browser and go to **http://localhost:3000**
+If you already have a resume as PDF or DOCX, go to the **Resume** page in the app and import it — Claude will convert it automatically.
 
-To stop it, go back to Terminal and press `Ctrl + C`.
+**2. Connect your accounts**
 
----
+Go to **Settings** and click **Set Up LinkedIn Session**. A browser opens — log in to LinkedIn normally, then close it. apply4me saves the session so it can search on your behalf.
 
-## First-time setup (in the app)
+Builtin.com is optional — same flow under **Set Up Builtin Session**.
 
-### 1. Fill in your resume
+**3. Set your search preferences**
 
-Open the file `apply4me/.claude/skills/resume/SKILL.md` in any text editor — it's in the apply4me folder you downloaded. Replace the example content with your real information: name, contact details, work history, skills.
-
-The more detail you put here, the better Claude can tailor your resume for each job. You can write naturally — no special format required.
-
-### 2. Connect your LinkedIn account
-
-In the app, go to **Settings** → click **Set Up Session**.
-
-A browser window will open. Log in to LinkedIn normally. Once you're on the LinkedIn home page, close the browser window. apply4me saves your login so it can search jobs on your behalf.
-
-> Your LinkedIn cookies are saved only to your computer at `~/.apply4me/linkedin_cookies.json`.
-
-### 3. Set your job search preferences
-
-In **Settings**, fill in:
-- **Job Keywords** — what roles you're looking for (e.g. `QA Engineer, SDET, Test Automation`)
-- **Location** — `Remote`, `New York`, etc.
-- **Company Blacklist** — companies you don't want to appear (comma-separated)
-
-Click **Save Settings**.
+Still in Settings: keywords, country, work type (remote/hybrid/on-site), date range, Easy Apply toggle, company blacklist. Save and you're ready.
 
 ---
 
 ## Using the app
 
-### Finding jobs
+**Scraping** — click **Scrape Jobs** on the dashboard. Jobs appear within a minute or two, each pre-scored. You can also add jobs manually by pasting a URL or dropping in a job description for sites that block scraping.
 
-On the Dashboard, click **Scrape Jobs**. apply4me opens LinkedIn in the background and collects matching job listings. New jobs appear in the feed within a minute or two.
+**Reviewing** — filter by match score or status. Approve what looks good, skip the rest. Click the `%` button to re-score any job on demand.
 
-For each job you can:
-- **Approve** — adds it to your queue for resume tailoring
-- **Skip** — hides it from the feed
+**Tailoring** — open an approved job, click **Tailor Resume**. Claude rewrites your resume for that role. Click **Generate Cover Letter** if you need one too.
 
-### Tailoring your resume
-
-Click on any approved job to open it. Then click **Tailor Resume**.
-
-Claude reads the job description and your SKILL.md, then rewrites your resume bullet points and summary to best match this specific role. A tailored PDF is saved automatically.
-
-You can also click **Generate Cover Letter** for a job-specific cover letter.
-
-### Applying
-
-Once a job has a tailored resume, the **Apply Now** button appears. Click it — apply4me opens the company's application form and fills it in using your details and the tailored PDF.
-
-It pauses before submitting so you can review everything. You confirm when you're ready.
+**Applying** — click **Apply Now**. apply4me opens the form, fills it in, and pauses for your review before submitting.
 
 ---
 
-## Your data
-
-Everything stays on your machine:
+## Your data stays local
 
 | What | Where |
 |------|-------|
 | Resume data | `apply4me/.claude/skills/resume/SKILL.md` |
 | Generated PDFs | `~/.apply4me/resumes/` |
-| LinkedIn cookies | `~/.apply4me/linkedin_cookies.json` |
+| LinkedIn session | `~/.apply4me/linkedin_cookies.json` |
+| Builtin session | `~/.apply4me/builtin_storage_state.json` |
 | App database | `~/.apply4me/apply4me.db` |
 | API key | `apply4me/.env` |
+
+No cloud sync, no telemetry, no account required beyond the Anthropic API key.
 
 ---
 
 ## Troubleshooting
 
-**The app won't start**
-Make sure you ran `node scripts/setup.js` first. If it still fails, try closing Terminal and opening it again.
+**App won't start** — run `node scripts/setup.js` first. If it still fails, close and reopen Terminal.
 
-**"API key not found" error**
-Check that your `.env` file has your real key (not the placeholder text) and that you saved the file.
+**"API key not found"** — check your `.env` has the real key, not the placeholder, and is saved.
 
-**No jobs showing up after scraping**
-Your LinkedIn session may have expired. Go to Settings → **Re-authenticate** and log in again.
+**No jobs after scraping** — LinkedIn session expired. Go to Settings → re-authenticate.
 
-**PDF won't generate**
-Make sure your SKILL.md has at least your name, one job, and some skills filled in.
+**PDF won't generate** — make sure your SKILL.md has at least a name, one job, and some skills.
 
 ---
 
 ## Contributing
 
-PRs welcome — especially new ATS adapters (Workday, iCIMS, Taleo) and resume template designs.
+PRs welcome — especially new ATS adapters and resume templates.
 
 ---
 
 ## License
 
-MIT
+[PolyForm Noncommercial 1.0.0](LICENSE) — free to use, study, and modify for noncommercial purposes. Commercial use is not permitted.
