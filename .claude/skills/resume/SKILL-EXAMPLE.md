@@ -66,6 +66,48 @@ argument-hint: "[what to update]"
      You never need to reference or copy anything from it here. -->
 ---
 
+## Professional Background
+
+<!-- ✅ SAFE TO EDIT — this section gives Claude a high-level picture of your career identity.
+     It's NOT printed on your resume. Claude uses it for two things:
+     1. Job matching — Claude scores incoming jobs against your core strengths and target role
+        to surface the best fits and flag mismatches before you apply.
+     2. Resume tailoring — Claude uses this to decide what to emphasize, what to downplay,
+        and how to frame your experience for a given role.
+     Write it like you'd brief a recruiter before a call. Be honest about what you're good at
+     and what you want next — Claude won't invent strengths you don't list here. -->
+
+In software engineering since 2016.
+
+**Core strengths:**
+<!-- List 3–5 areas where you're genuinely expert and spend most of your time.
+     Be specific — "backend API development" beats "software development".
+     Claude will lead with these when they match the JD. -->
+- Backend API design and development (Node.js, Python/FastAPI, REST + GraphQL)
+- Distributed systems and event-driven architecture (Kafka, SQS, async workers)
+- Infrastructure-as-code and cloud automation (AWS, Terraform, GitHub Actions)
+- Performance profiling and query optimization across relational and NoSQL stores
+
+**Secondary experience:**
+<!-- Skills you have but don't want to be hired for — or things you've done but aren't your identity.
+     Claude will mention these when the JD asks for them, but won't lead with them. -->
+- Frontend work in React — used in production but not my primary skill set
+- Data pipelines and ETL — built a few, not an area I want to specialize in
+- Team lead at Beta Inc for 6 months — solid experience, but prefer IC over management
+- Proficient in writing technical documentation and runbooks
+- Comfortable in agile/scrum — have led sprint ceremonies, not my focus
+
+**What I'm looking for:**
+<!-- Tell Claude what kind of role and company you're targeting.
+     This helps it skip irrelevant tailoring and frame your background correctly.
+     Be direct — this is never shown to employers. -->
+- Senior IC backend or platform engineering role — not a manager or tech lead position
+- Python or TypeScript codebase preferred; open to Go if the domain is interesting
+- Remote-first startup or scale-up, Series A–C stage
+- Team where infrastructure and reliability are taken seriously, not an afterthought
+
+---
+
 ## Summary
 
 <!-- You can leave this section empty. Claude will generate the summary from the experience data and the JD context -->
